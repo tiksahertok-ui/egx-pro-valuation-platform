@@ -2,12 +2,24 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth/requireAuth';
+import { z } from 'zod';
 
-export async function GET() {
+const EconomicQuerySchema = z.object({
+  category: z.enum(['monetary', 'macro', 'external', 'fiscal']).optional(),
+}).optional();
+
+export async function GET(request: Request) {
   const authError = await requireAuth();
   if (authError) return authError.error;
 
   try {
+    // Validate query params
+    const url = new URL(request.url);
+    const queryParams = Object.fromEntries(url.searchParams.entries());
+    const parsed = EconomicQuerySchema.safeParse(queryParams);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, { status: 400 });
+    }
     const indicators = await db.economicIndicator.findMany({
       orderBy: { name: 'asc' },
     });

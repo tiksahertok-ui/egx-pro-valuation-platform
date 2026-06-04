@@ -22,6 +22,9 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
+  const authError = await requireAuth();
+  if (authError) return authError.error;
+
   try {
     const { ticker } = await params;
 

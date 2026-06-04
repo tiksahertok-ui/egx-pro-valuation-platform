@@ -12,13 +12,13 @@ export interface EgyptMarketParams {
 
 // Default values — update quarterly from CBE and Damodaran sources
 export const EGYPT_MARKET_PARAMS: EgyptMarketParams = {
-  riskFreeRate: 0.275,           // ~27.5% (CBE 1Y T-bill as of 2024-2025)
+  riskFreeRate: 0.19,            // CBE rate cut to 19% as of Feb 2026
   baseEquityRiskPremium: 0.045,  // Damodaran mature market ERP
-  countryRiskPremium: 0.085,     // Egypt CRP (Damodaran Jan 2025 ~8.5%)
-  totalEquityRiskPremium: 0.130, // 4.5% + 8.5% = 13.0%
+  countryRiskPremium: 0.075,     // Reduced from 0.085 as Egypt macro improved
+  totalEquityRiskPremium: 0.12,  // 4.5% + 7.5% = 12.0%
   corporateTaxRate: 0.225,       // Egypt standard 22.5%
-  inflationRateEGP: 0.25,        // CBE medium-term target corridor
+  inflationRateEGP: 0.149,       // 14.9% urban inflation April 2026
   inflationRateUSD: 0.025,       // US Fed 2% target
-  usdEgpRate: 48.5,              // Update to current spot rate
-  lastUpdated: '2025-01-01',
+  usdEgpRate: 51.82,             // Current USD/EGP spot rate
+  lastUpdated: '2026-06-01',
 }

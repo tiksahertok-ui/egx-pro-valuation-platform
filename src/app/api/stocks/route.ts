@@ -1,11 +1,36 @@
 // GET /api/stocks - List all stocks with current valuation summary
 import { db } from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
-export async function GET() {
+const StocksQuerySchema = z.object({
+  sector: z.string().optional(),
+  sortBy: z.enum(['marketCap', 'ticker', 'peRatio', 'pbRatio', 'dividendYield']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
+  limit: z.coerce.number().min(1).max(200).optional(),
+}).optional();
+
+export async function GET(request: NextRequest) {
   try {
+    // Parse and validate query params
+    const url = request.url;
+    const params = new URL(url).searchParams;
+    const queryParams = Object.fromEntries(params.entries());
+    const parsed = StocksQuerySchema.safeParse(queryParams);
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, { status: 400 });
+    }
+    const query = parsed.data;
+
+    const sector = query?.sector;
+    const sortBy = query?.sortBy ?? 'marketCap';
+    const order = query?.order ?? 'desc';
+    const limit = query?.limit;
+
     const stocks = await db.stock.findMany({
-      orderBy: { marketCap: 'desc' },
+      where: sector ? { sector } : undefined,
+      orderBy: { [sortBy]: order },
+      take: limit,
       include: {
         valuations: {
           orderBy: { createdAt: 'desc' },

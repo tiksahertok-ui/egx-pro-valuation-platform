@@ -1,3 +1,5 @@
+import { isEGXTradingDay } from '@/lib/market-hours'
+
 export interface OHLCVRow {
   date: string
   open: number
@@ -16,6 +18,9 @@ export async function fetchEGXPriceHistory(
   fromDate: Date
 ): Promise<OHLCVRow[]> {
   // Yahoo Finance uses .CA suffix for Cairo exchange
+  // NOTE: EGX tickers on Yahoo Finance may use different formats depending on the stock.
+  // Some tickers use .CA (Cairo), others may appear under different suffixes or not at all.
+  // If .CA doesn't return data, alternatives to try include no suffix or .EG (non-standard).
   const yahooTicker = `${ticker}.CA`
   const period2 = Math.floor(Date.now() / 1000)
   const period1 = Math.floor(fromDate.getTime() / 1000)
@@ -51,8 +56,13 @@ export async function fetchEGXPriceHistory(
       // Skip rows with null values
       if (open == null || high == null || low == null || close == null) continue
 
+      const rowDate = new Date(timestamps[i] * 1000)
+
+      // Skip rows for non-trading days (EGX is closed Fri/Sat)
+      if (!isEGXTradingDay(rowDate)) continue
+
       rows.push({
-        date: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
+        date: rowDate.toISOString().split('T')[0],
         open,
         high,
         low,

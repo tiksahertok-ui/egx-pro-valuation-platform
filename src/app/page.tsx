@@ -17,11 +17,14 @@ import {
   Triangle,
   Activity,
   Star,
+  Briefcase,
 } from 'lucide-react';
 import DashboardView from '@/components/egx/dashboard-view';
 import StockDetailView from '@/components/egx/stock-detail-view';
+import PortfolioPanel from '@/components/egx/portfolio-panel';
 import LegalDisclaimer from '@/components/egx/legal-disclaimer';
 import DataFreshnessIndicator from '@/components/egx/data-freshness-indicator';
+import { getMarketStatus, type MarketStatus } from '@/lib/market-hours';
 
 // ─── Types ───────────────────────────────────────────────
 interface Stock {
@@ -46,7 +49,7 @@ interface Stock {
   confidence: number | null;
 }
 
-type ViewMode = 'dashboard' | 'stock';
+type ViewMode = 'dashboard' | 'stock' | 'portfolio';
 
 // ─── Format Helpers ──────────────────────────────────────
 export const formatEGP = (n: number) => {
@@ -77,9 +80,18 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [sidebarView, setSidebarView] = useState<
-    'watchlist' | 'sectors' | 'economic'
+    'watchlist' | 'sectors' | 'economic' | 'portfolio'
   >('watchlist');
+  const [marketStatus, setMarketStatus] = useState<MarketStatus>(() => getMarketStatus());
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // EGX market status — refresh every 30s
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMarketStatus(getMarketStatus());
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch stocks list
   useEffect(() => {
@@ -276,8 +288,38 @@ export default function Home() {
         {/* Status */}
         <div className='flex items-center gap-3'>
           <div className='flex items-center gap-2'>
-            <div className='w-2 h-2 rounded-full bg-emerald-400 egx-pulse' />
-            <span className='text-xs text-slate-400 hidden sm:inline'>Market Open</span>
+            <div
+              className={`w-2 h-2 rounded-full ${
+                marketStatus.isOpen
+                  ? 'bg-emerald-400 egx-pulse'
+                  : marketStatus.currentSession === 'weekend'
+                  ? 'bg-slate-500'
+                  : 'bg-amber-400'
+              }`}
+            />
+            <span
+              className={`text-xs hidden sm:inline ${
+                marketStatus.isOpen
+                  ? 'text-emerald-400'
+                  : marketStatus.currentSession === 'weekend'
+                  ? 'text-slate-500'
+                  : 'text-amber-400'
+              }`}
+            >
+              EGX{' '}
+              {marketStatus.currentSession === 'continuous'
+                ? 'Trading'
+                : marketStatus.currentSession === 'pre-open'
+                ? 'Pre-Open'
+                : marketStatus.currentSession === 'closing-auction'
+                ? 'Closing Auction'
+                : marketStatus.currentSession === 'weekend'
+                ? 'Closed (Weekend)'
+                : 'Closed'}
+            </span>
+            <span className='text-xs text-slate-500 hidden md:inline'>
+              {marketStatus.currentTimeCairo}
+            </span>
           </div>
           <DataFreshnessIndicator lastPriceAt={null} lastFinancialsAt={null} />
         </div>
@@ -327,6 +369,20 @@ export default function Home() {
             >
               <Landmark className='w-4 h-4' />
               Economic Data
+            </button>
+            <button
+              onClick={() => {
+                setCurrentView('portfolio');
+                setSidebarView('portfolio');
+              }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors ${
+                currentView === 'portfolio'
+                  ? 'bg-cyan-500/10 text-cyan-400'
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Briefcase className='w-4 h-4' />
+              Portfolio
             </button>
           </div>
 
@@ -450,9 +506,9 @@ export default function Home() {
               {sidebarView === 'economic' && (
                 <div className='px-2 space-y-2'>
                   {[
-                    { label: 'CBE Rate', value: '27.25%', dir: 'up' },
-                    { label: 'USD/EGP', value: '50.85', dir: 'up' },
-                    { label: 'Inflation', value: '23.4%', dir: 'down' },
+                    { label: 'CBE Rate', value: '19.0%', dir: 'down' },
+                    { label: 'USD/EGP', value: '51.82', dir: 'up' },
+                    { label: 'Inflation', value: '14.9%', dir: 'down' },
                     { label: 'GDP Growth', value: '3.8%', dir: 'up' },
                     { label: 'Reserves', value: '$47.2B', dir: 'up' },
                   ].map((item) => (
@@ -492,7 +548,9 @@ export default function Home() {
             </div>
           )}
 
-          {currentView === 'dashboard' ? (
+          {currentView === 'portfolio' ? (
+            <PortfolioPanel />
+          ) : currentView === 'dashboard' ? (
             <DashboardView
               stocks={stocks}
               loading={loading}

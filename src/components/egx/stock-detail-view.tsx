@@ -14,6 +14,7 @@ import {
   Globe2,
   Minus,
   BarChart2,
+  Heart,
 } from 'lucide-react';
 import ValuationPanel from './valuation-panel';
 import MetricsPanel from './metrics-panel';
@@ -22,6 +23,7 @@ import AIReportPanel from './ai-report-panel';
 import SectorPanel from './sector-panel';
 import DataFreshnessIndicator from './data-freshness-indicator';
 import MacroSensitivityPanel from './macro-sensitivity-panel';
+import HealthScorePanel from './health-score-panel';
 import { formatPrice, formatPercent, formatMarketCap } from '@/app/page';
 
 interface StockDetail {
@@ -316,6 +318,13 @@ export default function StockDetailView({ ticker, onBack }: StockDetailViewProps
             Sector
           </TabsTrigger>
           <TabsTrigger
+            value='health'
+            className='text-xs data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400 h-8'
+          >
+            <Heart className='w-3.5 h-3.5 mr-1.5' />
+            Health
+          </TabsTrigger>
+          <TabsTrigger
             value='macro'
             className='text-xs data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400 h-8'
           >
@@ -342,19 +351,11 @@ export default function StockDetailView({ ticker, onBack }: StockDetailViewProps
         <TabsContent value='sector' className='mt-3'>
           <SectorPanel ticker={ticker} sector={stock.sector} />
         </TabsContent>
+        <TabsContent value='health' className='mt-3'>
+          <HealthScorePanel ticker={ticker} />
+        </TabsContent>
         <TabsContent value='macro' className='mt-3'>
-          <MacroSensitivityPanel
-            currentWACC={0.15}
-            currentFairValue={fairValue}
-            currentPrice={stock.price}
-            currentUpside={upside}
-            sensitivities={[
-              { rateChangeBps: 100, waccImpact: 0.01, fairValueImpact: -(fairValue * 0.08), newUpside: upside - 8 },
-              { rateChangeBps: 200, waccImpact: 0.02, fairValueImpact: -(fairValue * 0.15), newUpside: upside - 15 },
-              { rateChangeBps: -100, waccImpact: -0.01, fairValueImpact: fairValue * 0.09, newUpside: upside + 9 },
-              { rateChangeBps: -200, waccImpact: -0.02, fairValueImpact: fairValue * 0.18, newUpside: upside + 18 },
-            ]}
-          />
+          <MacroSensitivityPanel ticker={ticker} />
         </TabsContent>
       </Tabs>
     </div>

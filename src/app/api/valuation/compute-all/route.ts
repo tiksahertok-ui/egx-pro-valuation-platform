@@ -1,15 +1,39 @@
 // POST /api/valuation/compute-all - Compute valuations for all stocks that don't have them
 import { db } from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { runAllValuations, FinancialDataInput } from '@/lib/valuation';
 import { requireAuth } from '@/lib/auth/requireAuth';
+import { z } from 'zod';
 
-export async function POST() {
+const ComputeAllBodySchema = z.object({
+  forceRecompute: z.boolean().optional(),
+  sector: z.string().optional(),
+}).optional();
+
+export async function POST(request: NextRequest) {
   const authError = await requireAuth();
   if (authError) return authError.error;
 
   try {
+    // Validate request body
+    let bodyData: z.infer<typeof ComputeAllBodySchema> = undefined;
+    try {
+      const bodyText = await request.text();
+      if (bodyText) {
+        const bodyParsed = ComputeAllBodySchema.safeParse(JSON.parse(bodyText));
+        if (!bodyParsed.success) {
+          return NextResponse.json({ error: 'Invalid request body', details: bodyParsed.error.flatten() }, { status: 400 });
+        }
+        bodyData = bodyParsed.data;
+      }
+    } catch {
+      // Empty body is acceptable
+    }
+
+    const sectorFilter = bodyData?.sector;
+
     const stocks = await db.stock.findMany({
+      where: sectorFilter ? { sector: sectorFilter } : undefined,
       include: {
         financials: { orderBy: { year: 'asc' } },
         valuations: { orderBy: { createdAt: 'desc' }, take: 1 },
