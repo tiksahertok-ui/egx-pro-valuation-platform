@@ -1,6 +1,15 @@
 // Technical Analysis Library
 // Calculate technical indicators from price history and generate buy/sell signals
 
+export { calculateFloorPivots, calculateFibonacciPivots, findSwingHighsLows } from './supportResistance'
+export type { PivotLevels } from './supportResistance'
+export { generateConfluentSignal } from './signals'
+export type { SignalInput, ConfluentSignal } from './signals'
+export { generateTradePlan } from './tradePlan'
+export type { InvestmentHorizon, TradePlan } from './tradePlan'
+export { validateDataSufficiency, INDICATOR_MINIMUM_PERIODS } from './validation'
+import { validateDataSufficiency } from './validation'
+
 export interface PriceDataPoint {
   date: string;
   open: number;
@@ -43,6 +52,14 @@ export interface TechnicalAnalysisResult {
   overallSignal: 'Strong Buy' | 'Buy' | 'Neutral' | 'Sell' | 'Strong Sell';
   signalScore: number; // -100 to +100
   signals: TechnicalSignal[];
+
+  // Data Sufficiency
+  dataSufficiency?: DataSufficiencyInfo;
+}
+
+export interface DataSufficiencyInfo {
+  availablePeriods: number;
+  insufficientIndicators: string[];
 }
 
 export interface TechnicalSignal {
@@ -387,6 +404,22 @@ function generateSignals(
  * Run comprehensive technical analysis on price history
  */
 export function runTechnicalAnalysis(priceHistory: PriceDataPoint[]): TechnicalAnalysisResult {
+  const availablePeriods = priceHistory.length;
+
+  // Data sufficiency validation
+  const insufficientIndicators: string[] = [];
+  const indicatorChecks: string[] = ['RSI', 'MACD', 'SMA20', 'SMA50', 'SMA200', 'EMA12', 'EMA26', 'ATR', 'ADX', 'STOCHASTIC', 'WILLIAMS_R', 'CCI', 'BOLLINGER', 'OBV'];
+  for (const indicator of indicatorChecks) {
+    const { sufficient } = validateDataSufficiency(indicator, availablePeriods);
+    if (!sufficient) {
+      insufficientIndicators.push(indicator);
+    }
+  }
+  const dataSufficiency: DataSufficiencyInfo = {
+    availablePeriods,
+    insufficientIndicators,
+  };
+
   if (priceHistory.length < 2) {
     return {
       date: '',
@@ -395,6 +428,7 @@ export function runTechnicalAnalysis(priceHistory: PriceDataPoint[]): TechnicalA
       stochK: 50, stochD: 50, williamsR: -50, cci14: 0,
       bbUpper: 0, bbMiddle: 0, bbLower: 0, atr14: 0,
       obv: 0, overallSignal: 'Neutral', signalScore: 0, signals: [],
+      dataSufficiency,
     };
   }
 
@@ -406,25 +440,25 @@ export function runTechnicalAnalysis(priceHistory: PriceDataPoint[]): TechnicalA
   const endIdx = closes.length - 1;
   const currentClose = closes[endIdx];
 
-  // Calculate all indicators
-  const _sma20 = sma(closes, 20, endIdx);
-  const _sma50 = sma(closes, 50, endIdx);
-  const _sma200 = sma(closes, 200, endIdx);
-  const _ema12 = ema(closes, 12, endIdx);
-  const _ema26 = ema(closes, 26, endIdx);
+  // Calculate all indicators (with data sufficiency awareness)
+  const _sma20 = validateDataSufficiency('SMA20', availablePeriods).sufficient ? sma(closes, 20, endIdx) : 0;
+  const _sma50 = validateDataSufficiency('SMA50', availablePeriods).sufficient ? sma(closes, 50, endIdx) : 0;
+  const _sma200 = validateDataSufficiency('SMA200', availablePeriods).sufficient ? sma(closes, 200, endIdx) : 0;
+  const _ema12 = validateDataSufficiency('EMA12', availablePeriods).sufficient ? ema(closes, 12, endIdx) : 0;
+  const _ema26 = validateDataSufficiency('EMA26', availablePeriods).sufficient ? ema(closes, 26, endIdx) : 0;
 
-  const _rsi14 = calcRSI(closes, endIdx);
-  const _macd = calcMACD(closes, endIdx);
-  const _bb = calcBollingerBands(closes, endIdx);
-  const _atr14 = calcATR(highs, lows, closes, endIdx);
-  const _adx14 = calcADX(highs, lows, closes, endIdx);
-  const _stoch = calcStochastic(highs, lows, closes, endIdx);
-  const _williamsR = calcWilliamsR(highs, lows, closes, endIdx);
-  const _cci14 = calcCCI(highs, lows, closes, endIdx);
-  const _obv = calcOBV(closes, volumes, endIdx);
+  const _rsi14 = validateDataSufficiency('RSI', availablePeriods).sufficient ? calcRSI(closes, endIdx) : 50;
+  const _macd = validateDataSufficiency('MACD', availablePeriods).sufficient ? calcMACD(closes, endIdx) : { macd: 0, signal: 0, histogram: 0 };
+  const _bb = validateDataSufficiency('BOLLINGER', availablePeriods).sufficient ? calcBollingerBands(closes, endIdx) : { upper: 0, middle: 0, lower: 0 };
+  const _atr14 = validateDataSufficiency('ATR', availablePeriods).sufficient ? calcATR(highs, lows, closes, endIdx) : 0;
+  const _adx14 = validateDataSufficiency('ADX', availablePeriods).sufficient ? calcADX(highs, lows, closes, endIdx) : 25;
+  const _stoch = validateDataSufficiency('STOCHASTIC', availablePeriods).sufficient ? calcStochastic(highs, lows, closes, endIdx) : { k: 50, d: 50 };
+  const _williamsR = validateDataSufficiency('WILLIAMS_R', availablePeriods).sufficient ? calcWilliamsR(highs, lows, closes, endIdx) : -50;
+  const _cci14 = validateDataSufficiency('CCI', availablePeriods).sufficient ? calcCCI(highs, lows, closes, endIdx) : 0;
+  const _obv = validateDataSufficiency('OBV', availablePeriods).sufficient ? calcOBV(closes, volumes, endIdx) : 0;
 
   // Previous MACD values for crossover detection
-  const prevMACD = endIdx > 0 ? calcMACD(closes, endIdx - 1) : { macd: _macd.macd, signal: _macd.signal };
+  const prevMACD = endIdx > 0 && validateDataSufficiency('MACD', availablePeriods).sufficient ? calcMACD(closes, endIdx - 1) : { macd: _macd.macd, signal: _macd.signal };
 
   // Generate signals
   const { signals, score, overall } = generateSignals(
@@ -459,5 +493,6 @@ export function runTechnicalAnalysis(priceHistory: PriceDataPoint[]): TechnicalA
     overallSignal: overall,
     signalScore: score,
     signals,
+    dataSufficiency,
   };
 }

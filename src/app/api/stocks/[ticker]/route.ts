@@ -1,6 +1,11 @@
 // GET /api/stocks/[ticker] - Get stock detail with latest financial data
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+
+const TickerParamsSchema = z.object({
+  ticker: z.string().min(2).max(10).regex(/^[A-Z0-9]+$/),
+});
 
 export async function GET(
   request: Request,
@@ -8,6 +13,11 @@ export async function GET(
 ) {
   try {
     const { ticker } = await params;
+
+    const parsed = TickerParamsSchema.safeParse({ ticker: ticker.toUpperCase() });
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid ticker', details: parsed.error.flatten() }, { status: 400 });
+    }
 
     const stock = await db.stock.findUnique({
       where: { ticker: ticker.toUpperCase() },

@@ -13,12 +13,15 @@ import {
   FileText,
   Globe2,
   Minus,
+  BarChart2,
 } from 'lucide-react';
 import ValuationPanel from './valuation-panel';
 import MetricsPanel from './metrics-panel';
 import TechnicalPanel from './technical-panel';
 import AIReportPanel from './ai-report-panel';
 import SectorPanel from './sector-panel';
+import DataFreshnessIndicator from './data-freshness-indicator';
+import MacroSensitivityPanel from './macro-sensitivity-panel';
 import { formatPrice, formatPercent, formatMarketCap } from '@/app/page';
 
 interface StockDetail {
@@ -129,6 +132,9 @@ export default function StockDetailView({ ticker, onBack }: StockDetailViewProps
 
   return (
     <div className='p-4 space-y-4'>
+      {/* ─── Data Freshness Indicator ──────────────────── */}
+      <DataFreshnessIndicator lastPriceAt={null} lastFinancialsAt={null} />
+
       {/* ─── Stock Header ───────────────────────────────── */}
       <div
         className='rounded-xl border p-4'
@@ -309,13 +315,20 @@ export default function StockDetailView({ ticker, onBack }: StockDetailViewProps
             <Globe2 className='w-3.5 h-3.5 mr-1.5' />
             Sector
           </TabsTrigger>
+          <TabsTrigger
+            value='macro'
+            className='text-xs data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400 h-8'
+          >
+            <BarChart2 className='w-3.5 h-3.5 mr-1.5' />
+            Macro
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value='overview' className='mt-3'>
           <OverviewTab ticker={ticker} stockData={stockData} />
         </TabsContent>
         <TabsContent value='valuation' className='mt-3'>
-          <ValuationPanel ticker={ticker} currentPrice={stock.price} />
+          <ValuationPanel ticker={ticker} currentPrice={stock.price} sector={stock.sector} />
         </TabsContent>
         <TabsContent value='metrics' className='mt-3'>
           <MetricsPanel ticker={ticker} />
@@ -328,6 +341,20 @@ export default function StockDetailView({ ticker, onBack }: StockDetailViewProps
         </TabsContent>
         <TabsContent value='sector' className='mt-3'>
           <SectorPanel ticker={ticker} sector={stock.sector} />
+        </TabsContent>
+        <TabsContent value='macro' className='mt-3'>
+          <MacroSensitivityPanel
+            currentWACC={0.15}
+            currentFairValue={fairValue}
+            currentPrice={stock.price}
+            currentUpside={upside}
+            sensitivities={[
+              { rateChangeBps: 100, waccImpact: 0.01, fairValueImpact: -(fairValue * 0.08), newUpside: upside - 8 },
+              { rateChangeBps: 200, waccImpact: 0.02, fairValueImpact: -(fairValue * 0.15), newUpside: upside - 15 },
+              { rateChangeBps: -100, waccImpact: -0.01, fairValueImpact: fairValue * 0.09, newUpside: upside + 9 },
+              { rateChangeBps: -200, waccImpact: -0.02, fairValueImpact: fairValue * 0.18, newUpside: upside + 18 },
+            ]}
+          />
         </TabsContent>
       </Tabs>
     </div>

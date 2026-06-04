@@ -1,8 +1,12 @@
 // GET /api/sectors - Get sector comparison data
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/requireAuth';
 
 export async function GET() {
+  const authError = await requireAuth();
+  if (authError) return authError.error;
+
   try {
     const sectorStats = await db.sectorStats.findMany({
       orderBy: { totalMarketCap: 'desc' },

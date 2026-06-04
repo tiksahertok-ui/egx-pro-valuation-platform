@@ -26,6 +26,13 @@ import {
   Gauge,
 } from 'lucide-react';
 import { formatPrice } from '@/app/page';
+import { calculateFloorPivots, PivotLevels } from '@/lib/technical/supportResistance';
+import { generateConfluentSignal, ConfluentSignal } from '@/lib/technical/signals';
+import { generateTradePlan, TradePlan, InvestmentHorizon } from '@/lib/technical/tradePlan';
+import { validateDataSufficiency } from '@/lib/technical/validation';
+import ConfluenceSignalDisplay from './confluence-signal-display';
+import TradePlanCard from './trade-plan-card';
+import InsufficientDataBadge from './insufficient-data-badge';
 
 interface TechnicalData {
   ticker: string;
@@ -221,6 +228,32 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
   // We'll create a reasonable representation using the available indicator data
   const chartData = generateChartData(data.currentPrice, indicators);
 
+  // Calculate floor pivot points for S/R levels
+  const prevHigh = chartData.length > 1 ? Math.max(...chartData.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 1.02;
+  const prevLow = chartData.length > 1 ? Math.min(...chartData.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 0.98;
+  const prevClose = chartData.length > 1 ? chartData[chartData.length - 2].close : data.currentPrice;
+  const pivotLevels: PivotLevels = calculateFloorPivots(prevHigh, prevLow, prevClose);
+
+  // Generate confluent signal
+  const confluentSignal: ConfluentSignal = generateConfluentSignal({
+    rsi: indicators.momentum.rsi14,
+    macdHistogram: indicators.momentum.macdHistogram,
+    macdSignalCross: indicators.momentum.macdHistogram > 0 ? 'bullish' : 'bearish',
+    priceVsSMA50: data.currentPrice > indicators.trend.sma50 ? 'above' : indicators.trend.sma50 > 0 ? 'below' : null,
+    priceVsSMA200: indicators.trend.sma200 > 0 ? (data.currentPrice > indicators.trend.sma200 ? 'above' : 'below') : null,
+    adx: indicators.trend.adx14,
+    stochasticK: indicators.momentum.stochK,
+    bollingerPosition: data.currentPrice >= indicators.volatility.bbUpper ? 'overbought' : data.currentPrice <= indicators.volatility.bbLower ? 'oversold' : 'neutral',
+  });
+
+  // Generate trade plans for three horizons
+  const tradePlans: TradePlan[] = (['short', 'medium', 'long'] as InvestmentHorizon[]).map(
+    (horizon) => generateTradePlan(data.currentPrice, indicators.volatility.atr14, pivotLevels, data.currentPrice * 1.2, horizon)
+  );
+
+  // Data sufficiency checks for key indicators
+  const sma200Sufficiency = validateDataSufficiency('SMA200', data.priceHistoryLength || 0);
+
   // Technical indicator cards
   const indicatorCards = [
     {
@@ -326,6 +359,16 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
         </div>
       </div>
 
+      {/* ─── Confluence Signal Display ──────────────────── */}
+      <ConfluenceSignalDisplay signal={confluentSignal} />
+
+      {/* ─── Trade Plan Cards ───────────────────────────── */}
+      <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+        {tradePlans.map((plan) => (
+          <TradePlanCard key={plan.horizon} plan={plan} />
+        ))}
+      </div>
+
       {/* ─── Price Chart ────────────────────────────────── */}
       <Card style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}>
         <CardHeader className='pb-2 pt-4 px-4'>
@@ -412,10 +455,16 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
                   strokeDasharray='2 2'
                   strokeWidth={1}
                 />
+                {/* Support/Resistance Pivot Lines */}
+                <ReferenceLine y={pivotLevels.r1} stroke='#ef4444' strokeDasharray='4 4' strokeWidth={1} label={{ value: 'R1', fill: '#ef4444', fontSize: 9, position: 'right' }} />
+                <ReferenceLine y={pivotLevels.r2} stroke='#ef4444' strokeDasharray='4 4' strokeWidth={0.5} strokeOpacity={0.5} label={{ value: 'R2', fill: '#ef4444', fontSize: 8, position: 'right' }} />
+                <ReferenceLine y={pivotLevels.s1} stroke='#10b981' strokeDasharray='4 4' strokeWidth={1} label={{ value: 'S1', fill: '#10b981', fontSize: 9, position: 'right' }} />
+                <ReferenceLine y={pivotLevels.s2} stroke='#10b981' strokeDasharray='4 4' strokeWidth={0.5} strokeOpacity={0.5} label={{ value: 'S2', fill: '#10b981', fontSize: 8, position: 'right' }} />
+                <ReferenceLine y={pivotLevels.pivot} stroke='#f59e0b' strokeDasharray='2 4' strokeWidth={0.5} strokeOpacity={0.4} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <div className='flex items-center gap-4 mt-2 text-[10px]'>
+          <div className='flex items-center gap-4 mt-2 text-[10px] flex-wrap'>
             <span className='flex items-center gap-1'>
               <span className='w-3 h-0.5 bg-cyan-400 inline-block' /> Price
             </span>
@@ -430,6 +479,12 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
             <span className='flex items-center gap-1'>
               <span className='w-3 h-0.5 bg-slate-600 inline-block border-dashed' />{' '}
               BB
+            </span>
+            <span className='flex items-center gap-1'>
+              <span className='w-3 h-0.5 bg-red-400 inline-block' style={{ borderStyle: 'dashed' }} /> R1/R2
+            </span>
+            <span className='flex items-center gap-1'>
+              <span className='w-3 h-0.5 bg-emerald-400 inline-block' style={{ borderStyle: 'dashed' }} /> S1/S2
             </span>
           </div>
         </CardContent>
@@ -543,7 +598,9 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
                   )}
                 </div>
                 <div className={`mono-num text-sm font-bold ${isAvailable ? 'text-white' : 'text-slate-500'}`}>
-                  {isAvailable ? ma.value.toFixed(2) : 'N/A'}
+                  {isAvailable ? ma.value.toFixed(2) : (
+                    <InsufficientDataBadge periods={data.priceHistoryLength || 0} required={ma.label === 'SMA 200' ? 200 : ma.label === 'SMA 50' ? 50 : 20} indicator={ma.label} />
+                  )}
                 </div>
                 <div
                   className={`mono-num text-[10px] ${
@@ -551,7 +608,7 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
                     (ma.diff ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'
                   }`}
                 >
-                  {isAvailable && ma.diff !== null ? `${ma.diff >= 0 ? '+' : ''}${ma.diff.toFixed(2)} vs price` : 'Insufficient data'}
+                  {isAvailable && ma.diff !== null ? `${ma.diff >= 0 ? '+' : ''}${ma.diff.toFixed(2)} vs price` : ''}
                 </div>
               </div>
             );})}

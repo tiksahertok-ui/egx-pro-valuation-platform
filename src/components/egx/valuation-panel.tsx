@@ -29,6 +29,10 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { formatPrice, formatPercent } from '@/app/page';
+import LegalDisclaimer from './legal-disclaimer';
+import { EGYPT_MARKET_PARAMS } from '@/lib/valuation/egyptMarketParams';
+import { validateTerminalGrowthRate, CurrencyConvention } from '@/lib/valuation/wacc';
+import { getWeightsForSector } from '@/lib/valuation/sectorWeights';
 
 interface ValuationData {
   ticker: string;
@@ -53,6 +57,7 @@ interface ValuationData {
 interface ValuationPanelProps {
   ticker: string;
   currentPrice: number;
+  sector?: string;
 }
 
 function ValuationTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { fullName: string; fairValue: number; bearCase: number; bullCase: number } }> }) {
@@ -73,9 +78,11 @@ function ValuationTooltip({ active, payload }: { active?: boolean; payload?: Arr
 export default function ValuationPanel({
   ticker,
   currentPrice,
+  sector,
 }: ValuationPanelProps) {
   const [data, setData] = useState<ValuationData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [currencyConvention, setCurrencyConvention] = useState<CurrencyConvention>('EGP_NOMINAL');
 
   useEffect(() => {
     const fetchValuation = async () => {
@@ -172,8 +179,92 @@ export default function ValuationPanel({
     bullCase: v.bullCase,
   }));
 
+  // Terminal growth rate validation
+  const terminalGrowthRate = 0.03; // typical 3% terminal growth assumption
+  const waccEstimate = 0.15; // approximate WACC for EGX stocks
+  const growthValidation = validateTerminalGrowthRate(terminalGrowthRate, waccEstimate, currencyConvention);
+
+  // Sector-specific model weights
+  const sectorWeights = getWeightsForSector(sector || 'Default');
+  const sectorLabel = sector || 'Default';
+
+  // Currency convention options
+  const conventionOptions: { value: CurrencyConvention; label: string }[] = [
+    { value: 'EGP_NOMINAL', label: 'EGP Nominal' },
+    { value: 'EGP_REAL', label: 'EGP Real' },
+    { value: 'USD_REAL', label: 'USD Real' },
+  ];
+
   return (
     <div className='space-y-4'>
+      {/* ─── Legal Disclaimer (inline) ──────────────────── */}
+      <LegalDisclaimer variant='inline' />
+
+      {/* ─── Currency Convention Selector ───────────────── */}
+      <div
+        className='rounded-xl border p-4'
+        style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
+      >
+        <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3'>
+          <div className='flex items-center gap-2'>
+            <Shield className='w-4 h-4 text-cyan-400' />
+            <span className='text-xs font-semibold text-slate-300'>Currency Convention</span>
+          </div>
+          <select
+            value={currencyConvention}
+            onChange={(e) => setCurrencyConvention(e.target.value as CurrencyConvention)}
+            className='h-8 rounded-md border px-3 text-xs bg-slate-800 border-slate-700 text-slate-200 focus:border-cyan-500 focus:outline-none'
+          >
+            {conventionOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* ─── Terminal Growth Rate Warning ──────────────── */}
+      {growthValidation.warning && (
+        <div
+          className='rounded-xl border p-3 flex items-start gap-2'
+          style={{ backgroundColor: '#1a1206', borderColor: growthValidation.valid ? '#854d0e' : '#ef4444' }}
+        >
+          <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${growthValidation.valid ? 'text-amber-400' : 'text-red-400'}`} />
+          <div>
+            <span className={`text-xs font-semibold ${growthValidation.valid ? 'text-amber-300' : 'text-red-300'}`}>
+              Terminal Growth Rate Warning
+            </span>
+            <p className={`text-[11px] mt-0.5 ${growthValidation.valid ? 'text-amber-200' : 'text-red-200'}`}>
+              {growthValidation.warning}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Sector Model Weights ──────────────────────── */}
+      <div
+        className='rounded-xl border p-4'
+        style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
+      >
+        <div className='flex items-center gap-2 mb-3'>
+          <Zap className='w-4 h-4 text-cyan-400' />
+          <span className='text-xs font-semibold text-slate-300'>Model Weights — {sectorLabel} Sector</span>
+        </div>
+        <div className='grid grid-cols-4 sm:grid-cols-8 gap-2'>
+          {Object.entries(sectorWeights).map(([model, weight]) => (
+            <div key={model} className='text-center'>
+              <div className='text-[9px] text-slate-500 mb-1'>{model}</div>
+              <div className='w-full h-1.5 rounded-full bg-slate-800 overflow-hidden mb-1'>
+                <div
+                  className='h-full rounded-full bg-cyan-500/60'
+                  style={{ width: `${weight * 100}%` }}
+                />
+              </div>
+              <div className='mono-num text-[10px] text-slate-300'>{(weight * 100).toFixed(0)}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* ─── Fair Value Summary ─────────────────────────── */}
       <div
         className='rounded-xl border p-6 egx-glow'

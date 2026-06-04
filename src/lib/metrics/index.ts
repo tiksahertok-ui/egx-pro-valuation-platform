@@ -1,6 +1,9 @@
 // Financial Metrics Library
 // Calculate comprehensive financial metrics including WACC, CAPM, ROE, ROA, ROIC, etc.
 
+import { EGYPT_MARKET_PARAMS } from '../valuation/egyptMarketParams';
+import { calculateCostOfEquityEgypt, calculateWACC } from '../valuation/wacc';
+
 export interface MetricsResult {
   // Cost of Capital
   wacc: number;
@@ -95,10 +98,6 @@ export interface MetricsInput {
   sharesOutstanding: number;
 }
 
-// Egypt-specific parameters
-const RISK_FREE_RATE = 0.27;      // CBE policy rate as proxy
-const MARKET_RISK_PREMIUM = 0.08; // Egypt equity risk premium
-
 function safeDivide(numerator: number, denominator: number, defaultValue: number = 0): number {
   if (denominator === 0 || !isFinite(denominator)) return defaultValue;
   return numerator / denominator;
@@ -117,22 +116,21 @@ export function calculateMetrics(input: MetricsInput): MetricsResult {
   const earliest = sorted[sorted.length - 1];
 
   // =============================================
-  // Cost of Capital Calculations
+  // Cost of Capital Calculations (Egypt-specific)
   // =============================================
 
-  // Cost of Equity using CAPM: Ke = Rf + Beta * (Rm - Rf)
-  const costOfEquity = RISK_FREE_RATE + beta * MARKET_RISK_PREMIUM;
+  // Cost of Equity using Egypt CAPM: Ke = Rf + β × (ERP_mature + CRP)
+  const costOfEquity = calculateCostOfEquityEgypt(beta);
 
   // Cost of Debt: Interest Expense / Total Debt
   const totalDebt = latest.longTermDebt + latest.shortTermDebt;
   const costOfDebt = safeDivide(latest.interestExpense, totalDebt, 0.10);
-  const afterTaxCostOfDebt = costOfDebt * (1 - latest.taxRate);
 
-  // WACC calculation
+  // WACC calculation using Egypt-specific parameters
   const totalCapital = latest.totalEquity + totalDebt;
   const equityWeight = safeDivide(latest.totalEquity, totalCapital, 0.5);
   const debtWeight = safeDivide(totalDebt, totalCapital, 0.5);
-  const wacc = equityWeight * costOfEquity + debtWeight * afterTaxCostOfDebt;
+  const wacc = calculateWACC(costOfEquity, costOfDebt, equityWeight, debtWeight);
 
   // =============================================
   // Profitability Ratios
@@ -283,8 +281,8 @@ export function calculateMetrics(input: MetricsInput): MetricsResult {
     fcfeYield: parseFloat(fcfeYield.toFixed(4)),
     earningsQuality: parseFloat(earningsQuality.toFixed(4)),
 
-    riskFreeRate: RISK_FREE_RATE,
-    marketRiskPremium: MARKET_RISK_PREMIUM,
+    riskFreeRate: EGYPT_MARKET_PARAMS.riskFreeRate,
+    marketRiskPremium: EGYPT_MARKET_PARAMS.totalEquityRiskPremium,
     beta,
   };
 }
@@ -300,6 +298,6 @@ function getEmptyMetrics(): MetricsResult {
     currentRatio: 0, quickRatio: 0,
     peRatio: 0, pbRatio: 0, evEbitda: 0, priceToFCF: 0, dividendPayoutRatio: 0,
     fcffYield: 0, fcfeYield: 0, earningsQuality: 0,
-    riskFreeRate: RISK_FREE_RATE, marketRiskPremium: MARKET_RISK_PREMIUM, beta: 1.0,
+    riskFreeRate: EGYPT_MARKET_PARAMS.riskFreeRate, marketRiskPremium: EGYPT_MARKET_PARAMS.totalEquityRiskPremium, beta: 1.0,
   };
 }

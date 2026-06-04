@@ -15,6 +15,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { formatPrice } from '@/app/page';
+import LegalDisclaimer from './legal-disclaimer';
 
 interface Report {
   id: string;
@@ -183,6 +184,7 @@ export default function AIReportPanel({ ticker }: AIReportPanelProps) {
       {/* ─── Report Display ─────────────────────────────── */}
       {selectedReport ? (
         <Card style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}>
+          <LegalDisclaimer variant='report' />
           <CardHeader className='pb-3 pt-4 px-4'>
             <div className='flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3'>
               <div>

@@ -1,15 +1,34 @@
 // POST /api/report/[ticker] - Generate AI analyst report using z-ai-web-dev-sdk
 // GET /api/report/[ticker] - Get existing AI reports for a stock
 import { db } from '@/lib/db';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth/requireAuth';
 import ZAI from 'z-ai-web-dev-sdk';
+import { z } from 'zod';
+
+const TickerParamsSchema = z.object({
+  ticker: z.string().min(2).max(10).regex(/^[A-Z0-9]+$/),
+});
+
+const ReportBodySchema = z.object({
+  forceRefresh: z.boolean().optional(),
+  language: z.enum(['en', 'ar', 'both']).optional(),
+}).optional();
+
+const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_GENERATIONS_PER_DAY = 5;
 
 export async function GET(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   try {
     const { ticker } = await params;
+
+    const parsed = TickerParamsSchema.safeParse({ ticker: ticker.toUpperCase() });
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid ticker', details: parsed.error.flatten() }, { status: 400 });
+    }
 
     const stock = await db.stock.findUnique({
       where: { ticker: ticker.toUpperCase() },
@@ -47,11 +66,39 @@ export async function GET(
 }
 
 export async function POST(
-  request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
+  // Auth check
+  const authResult = await requireAuth();
+  if (authResult) {
+    return authResult.error;
+  }
+
   try {
     const { ticker } = await params;
+
+    const tickerParsed = TickerParamsSchema.safeParse({ ticker: ticker.toUpperCase() });
+    if (!tickerParsed.success) {
+      return NextResponse.json({ error: 'Invalid ticker', details: tickerParsed.error.flatten() }, { status: 400 });
+    }
+
+    // Validate request body if present
+    let bodyResult: z.SafeParseReturnType<any, any> = { success: true, data: undefined };
+    try {
+      const bodyText = await request.text();
+      if (bodyText) {
+        const bodyJson = JSON.parse(bodyText);
+        bodyResult = ReportBodySchema.safeParse(bodyJson);
+      }
+    } catch {
+      // Empty or invalid body is acceptable for this endpoint
+    }
+    if (!bodyResult.success) {
+      return NextResponse.json({ error: 'Invalid request body', details: bodyResult.error?.flatten?.() ?? 'Validation failed' }, { status: 400 });
+    }
+
+    const forceRefresh = request.nextUrl.searchParams.get('forceRefresh') === 'true';
 
     const stock = await db.stock.findUnique({
       where: { ticker: ticker.toUpperCase() },
@@ -63,11 +110,59 @@ export async function POST(
         valuations: {
           orderBy: { createdAt: 'desc' },
         },
+        reports: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
     if (!stock) {
       return NextResponse.json({ error: 'Stock not found' }, { status: 404 });
+    }
+
+    // Cache check: return cached report if less than 24 hours old
+    if (!forceRefresh && stock.reports.length > 0) {
+      const latestReport = stock.reports[0];
+      const reportAge = Date.now() - new Date(latestReport.createdAt).getTime();
+      if (reportAge < CACHE_DURATION_MS) {
+        return NextResponse.json({
+          id: latestReport.id,
+          ticker: stock.ticker,
+          name: stock.name,
+          nameAr: stock.nameAr,
+          title: latestReport.title,
+          titleAr: latestReport.titleAr,
+          content: latestReport.content,
+          contentAr: latestReport.contentAr,
+          rating: latestReport.rating,
+          targetPrice: latestReport.targetPrice,
+          createdAt: latestReport.createdAt,
+          cached: true,
+          cacheExpiresAt: new Date(new Date(latestReport.createdAt).getTime() + CACHE_DURATION_MS).toISOString(),
+        });
+      }
+    }
+
+    // Rate limit: max 5 generations per stock per day
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    const todayReportCount = await db.analystReport.count({
+      where: {
+        stockId: stock.id,
+        createdAt: { gte: oneDayAgo },
+      },
+    });
+
+    if (todayReportCount >= MAX_GENERATIONS_PER_DAY) {
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded',
+          message: `Maximum ${MAX_GENERATIONS_PER_DAY} report generations per stock per day. Use forceRefresh after the cache expires.`,
+          retryAfter: new Date(oneDayAgo.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+        },
+        { status: 429 }
+      );
     }
 
     const latestFinancial = stock.financials[0];
@@ -192,11 +287,11 @@ ${valuationSummary}
     else if (contentLower.includes('sell') && !contentLower.includes('strong sell')) rating = 'Sell';
 
     // Try to extract target price
-    const targetPriceMatch = englishContent.match(/target\s*price[:\s]*EGP\s*([\d,]+\.?\d*)/i) 
+    const targetPriceMatch = englishContent.match(/target\s*price[:\s]*EGP\s*([\d,]+\.?\d*)/i)
       ?? englishContent.match(/target\s*price[:\s]*([\d,]+\.?\d*)/i)
       ?? englishContent.match(/12.month\s*target[:\s]*EGP\s*([\d,]+\.?\d*)/i)
       ?? englishContent.match(/12.month\s*target[:\s]*([\d,]+\.?\d*)/i);
-    
+
     if (targetPriceMatch) {
       const parsed = parseFloat(targetPriceMatch[1].replace(/,/g, ''));
       if (!isNaN(parsed) && parsed > 0) targetPrice = parsed;
@@ -230,6 +325,7 @@ ${valuationSummary}
       rating,
       targetPrice,
       createdAt: report.createdAt,
+      cached: false,
     });
   } catch (error) {
     console.error('Error generating report:', error);

@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import DashboardView from '@/components/egx/dashboard-view';
 import StockDetailView from '@/components/egx/stock-detail-view';
+import LegalDisclaimer from '@/components/egx/legal-disclaimer';
+import DataFreshnessIndicator from '@/components/egx/data-freshness-indicator';
 
 // ─── Types ───────────────────────────────────────────────
 interface Stock {
@@ -272,14 +274,17 @@ export default function Home() {
         <Separator orientation='vertical' className='h-6 bg-slate-700 hidden lg:block' />
 
         {/* Status */}
-        <div className='flex items-center gap-2'>
-          <div className='w-2 h-2 rounded-full bg-emerald-400 egx-pulse' />
-          <span className='text-xs text-slate-400 hidden sm:inline'>Market Open</span>
+        <div className='flex items-center gap-3'>
+          <div className='flex items-center gap-2'>
+            <div className='w-2 h-2 rounded-full bg-emerald-400 egx-pulse' />
+            <span className='text-xs text-slate-400 hidden sm:inline'>Market Open</span>
+          </div>
+          <DataFreshnessIndicator lastPriceAt={null} lastFinancialsAt={null} />
         </div>
       </header>
 
       {/* ─── Body ────────────────────────────────────────── */}
-      <div className='flex flex-1 overflow-hidden'>
+      <div className='flex flex-1 overflow-hidden min-h-0'>
         {/* ─── Sidebar ───────────────────────────────────── */}
         <aside
           className='hidden md:flex flex-col w-56 border-r shrink-0'
@@ -498,6 +503,9 @@ export default function Home() {
           )}
         </main>
       </div>
+
+      {/* ─── Footer ──────────────────────────────────────── */}
+      <LegalDisclaimer variant='footer' />
     </div>
   );
 }

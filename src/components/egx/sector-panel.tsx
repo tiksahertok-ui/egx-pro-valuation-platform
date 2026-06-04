@@ -39,6 +39,7 @@ interface SectorStats {
   avgDebtEquity: number;
   totalMarketCap: number;
   numCompanies: number;
+  computedAt?: string;
   stocks: Array<{
     ticker: string;
     name: string;
@@ -246,6 +247,15 @@ export default function SectorPanel({ ticker, sector }: SectorPanelProps) {
             <Globe2 className='w-4 h-4 text-cyan-400' />
             {sector} Sector Overview
           </CardTitle>
+          {sectorData.computedAt ? (
+            <div className='text-[10px] text-slate-500 flex items-center gap-1 mt-1'>
+              <span>Last computed: {new Date(sectorData.computedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          ) : (
+            <div className='text-[10px] text-amber-500/70 flex items-center gap-1 mt-1'>
+              Static data
+            </div>
+          )}
         </CardHeader>
         <CardContent className='px-4 pb-4'>
           <div className='grid grid-cols-2 md:grid-cols-4 gap-3 mb-4'>

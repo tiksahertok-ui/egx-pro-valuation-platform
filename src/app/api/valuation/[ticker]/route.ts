@@ -3,13 +3,27 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { runAllValuations, FinancialDataInput } from '@/lib/valuation';
+import { z } from 'zod';
+import { requireAuth } from '@/lib/auth/requireAuth';
+
+const TickerParamsSchema = z.object({
+  ticker: z.string().min(2).max(10).regex(/^[A-Z0-9]+$/),
+});
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
+  const authError = await requireAuth();
+  if (authError) return authError.error;
+
   try {
     const { ticker } = await params;
+
+    const parsed = TickerParamsSchema.safeParse({ ticker: ticker.toUpperCase() });
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid ticker', details: parsed.error.flatten() }, { status: 400 });
+    }
 
     const stock = await db.stock.findUnique({
       where: { ticker: ticker.toUpperCase() },
@@ -34,7 +48,7 @@ export async function GET(
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentValuations = existingValuations.filter(v => v.createdAt > oneDayAgo);
 
-    if (recentValuations.length >= 8) {
+    if (recentValuations.length >= 9) {
       return NextResponse.json({
         ticker: stock.ticker,
         name: stock.name,
@@ -88,6 +102,7 @@ export async function GET(
       grossProfit: f.grossProfit,
       operatingExpenses: f.operatingExpenses,
       eps: f.eps,
+      hasOCI: f.hasOCI,
     }));
 
     if (financialInputs.length === 0) {

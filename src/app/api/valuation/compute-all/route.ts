@@ -2,8 +2,12 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { runAllValuations, FinancialDataInput } from '@/lib/valuation';
+import { requireAuth } from '@/lib/auth/requireAuth';
 
 export async function POST() {
+  const authError = await requireAuth();
+  if (authError) return authError.error;
+
   try {
     const stocks = await db.stock.findMany({
       include: {
@@ -62,6 +66,7 @@ export async function POST() {
           grossProfit: f.grossProfit,
           operatingExpenses: f.operatingExpenses,
           eps: f.eps,
+          hasOCI: f.hasOCI,
         }));
 
         const valuationResults = await runAllValuations(

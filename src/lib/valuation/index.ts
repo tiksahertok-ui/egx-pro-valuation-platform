@@ -3,18 +3,23 @@ import { dcfFCFF, FinancialDataInput, ValuationOutput } from './dcf-fcff';
 import { dcfFCFE } from './dcf-fcfe';
 import { ddm } from './ddm';
 import { residualIncome } from './residual-income';
-import { relativeValuation } from './relative-valuation';
+import { peRelativeValuation, pbRelativeValuation } from './relative-valuation';
 import { evEbitdaValuation } from './ev-ebitda';
 import { assetBasedValuation } from './asset-based';
+import { getWeightsForSector, modelWeightsToArray } from './sectorWeights';
 
 export type { FinancialDataInput, ValuationOutput };
+export type { CurrencyConvention } from './wacc';
 export { dcfFCFF } from './dcf-fcff';
 export { dcfFCFE } from './dcf-fcfe';
 export { ddm } from './ddm';
 export { residualIncome } from './residual-income';
-export { relativeValuation } from './relative-valuation';
+export { peRelativeValuation, pbRelativeValuation, relativeValuation } from './relative-valuation';
 export { evEbitdaValuation } from './ev-ebitda';
 export { assetBasedValuation } from './asset-based';
+export { getWeightsForSector, modelWeightsToArray } from './sectorWeights';
+export { EGYPT_MARKET_PARAMS } from './egyptMarketParams';
+export { calculateCostOfEquityEgypt, calculateWACC, validateTerminalGrowthRate } from './wacc';
 
 interface StockData {
   id: string;
@@ -44,6 +49,7 @@ interface SectorStatsData {
 
 /**
  * Run all 8 valuation models for a given stock
+ * Model order: [DCF FCFF, DCF FCFE, DDM, Residual Income, P/E Relative, P/B Relative, EV/EBITDA, Asset-Based]
  */
 export async function runAllValuations(
   stock: StockData,
@@ -116,8 +122,8 @@ export async function runAllValuations(
     beta: stock.beta,
   });
 
-  // 5. Relative Valuation (P/E + P/B)
-  const relativeResult = relativeValuation({
+  // 5. P/E Relative Valuation
+  const peRelativeParams = {
     currentPrice: stock.price,
     eps: stock.eps,
     bookValuePerShare: stock.bookValuePerShare,
@@ -128,9 +134,13 @@ export async function runAllValuations(
     sectorAvgPE: sector.avgPE,
     sectorAvgPB: sector.avgPB,
     debtToEquity,
-  });
+  };
+  const peRelativeResult = peRelativeValuation(peRelativeParams);
 
-  // 6. EV/EBITDA
+  // 6. P/B Relative Valuation
+  const pbRelativeResult = pbRelativeValuation(peRelativeParams);
+
+  // 7. EV/EBITDA
   const evEbitdaResult = evEbitdaValuation({
     financials: latestFinancials,
     currentPrice: stock.price,
@@ -138,18 +148,21 @@ export async function runAllValuations(
     sectorAvgEVEBITDA: sector.avgEVEbitda,
   });
 
-  // 7. Asset-Based
+  // 8. Asset-Based
   const assetResult = assetBasedValuation({
     financials: latestFinancials,
     currentPrice: stock.price,
     sector: stock.sector,
   });
 
-  // 8. Composite model: Weighted average of all models
-  // Weights based on model reliability for the given sector
-  const modelWeights = getModelWeights(stock.sector);
-  const allModels = [dcfFCFFResult, dcfFCFEResult, ddmResult, riResult, relativeResult, evEbitdaResult, assetResult];
-  
+  // All 8 models in the canonical order matching sectorWeights
+  // Order: [DCF FCFF, DCF FCFE, DDM, Residual Income, P/E Relative, P/B Relative, EV/EBITDA, Asset-Based]
+  const allModels = [dcfFCFFResult, dcfFCFEResult, ddmResult, riResult, peRelativeResult, pbRelativeResult, evEbitdaResult, assetResult];
+
+  // Composite model: Weighted average using sector-aware weights
+  const sectorWeights = getWeightsForSector(stock.sector);
+  const modelWeights = modelWeightsToArray(sectorWeights);
+
   const compositeFairValue = allModels.reduce((sum, result, idx) => {
     const weight = modelWeights[idx];
     return sum + result.fairValue * weight;
@@ -181,45 +194,8 @@ export async function runAllValuations(
     bullCase: parseFloat(compositeBull.toFixed(2)),
     upside: parseFloat(compositeUpside.toFixed(2)),
     confidence: parseFloat(Math.min(0.95, avgConfidence * 1.05).toFixed(2)),
-    assumptions: `Composite model: Weighted average of DCF FCFF (${(modelWeights[0]*100).toFixed(0)}%), DCF FCFE (${(modelWeights[1]*100).toFixed(0)}%), DDM (${(modelWeights[2]*100).toFixed(0)}%), Residual Income (${(modelWeights[3]*100).toFixed(0)}%), Relative (${(modelWeights[4]*100).toFixed(0)}%), EV/EBITDA (${(modelWeights[5]*100).toFixed(0)}%), Asset-Based (${(modelWeights[6]*100).toFixed(0)}%). Weights optimized for ${stock.sector} sector.`,
+    assumptions: `Composite model: Weighted average of DCF FCFF (${(modelWeights[0]*100).toFixed(0)}%), DCF FCFE (${(modelWeights[1]*100).toFixed(0)}%), DDM (${(modelWeights[2]*100).toFixed(0)}%), Residual Income (${(modelWeights[3]*100).toFixed(0)}%), P/E Relative (${(modelWeights[4]*100).toFixed(0)}%), P/B Relative (${(modelWeights[5]*100).toFixed(0)}%), EV/EBITDA (${(modelWeights[6]*100).toFixed(0)}%), Asset-Based (${(modelWeights[7]*100).toFixed(0)}%). Weights optimized for ${stock.sector} sector.`,
   };
 
   return [...allModels, compositeResult];
-}
-
-/**
- * Get model weights based on sector characteristics
- * Order: [DCF FCFF, DCF FCFE, DDM, Residual Income, Relative, EV/EBITDA, Asset-Based]
- */
-function getModelWeights(sector: string): number[] {
-  switch (sector) {
-    case 'Banking':
-      return [0.15, 0.10, 0.10, 0.15, 0.20, 0.15, 0.15];
-    case 'Real Estate':
-      return [0.10, 0.10, 0.05, 0.10, 0.15, 0.15, 0.35];
-    case 'Financial Services':
-      return [0.15, 0.10, 0.10, 0.15, 0.20, 0.20, 0.10];
-    case 'Energy':
-      return [0.20, 0.10, 0.10, 0.10, 0.15, 0.25, 0.10];
-    case 'Chemicals':
-      return [0.20, 0.15, 0.05, 0.10, 0.15, 0.25, 0.10];
-    case 'Technology':
-      return [0.20, 0.20, 0.02, 0.15, 0.25, 0.15, 0.03];
-    case 'Tobacco':
-      return [0.10, 0.10, 0.25, 0.15, 0.15, 0.15, 0.10];
-    case 'Food':
-      return [0.15, 0.15, 0.10, 0.10, 0.20, 0.20, 0.10];
-    case 'Construction':
-      return [0.15, 0.10, 0.05, 0.10, 0.15, 0.20, 0.25];
-    case 'Electrical Equipment':
-      return [0.20, 0.15, 0.05, 0.10, 0.15, 0.25, 0.10];
-    case 'Telecommunications':
-      return [0.15, 0.10, 0.20, 0.15, 0.15, 0.15, 0.10];
-    case 'Tourism':
-      return [0.15, 0.10, 0.05, 0.10, 0.15, 0.20, 0.25];
-    case 'Construction Materials':
-      return [0.15, 0.10, 0.05, 0.10, 0.15, 0.25, 0.20];
-    default:
-      return [0.15, 0.12, 0.08, 0.12, 0.18, 0.20, 0.15];
-  }
 }

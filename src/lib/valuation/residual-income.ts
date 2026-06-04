@@ -125,5 +125,9 @@ export function residualIncome(params: ResidualIncomeParams): ValuationOutput {
     upside: parseFloat(upside.toFixed(2)),
     confidence: parseFloat(confidence.toFixed(2)),
     assumptions,
+    hasCleanSurplusViolation: latestFinancials.hasOCI === true,
+    cleanSurplusWarning: latestFinancials.hasOCI === true
+      ? 'Clean surplus relation violated: Other Comprehensive Income (OCI) detected. Book value changes may not equal net income minus dividends, which can cause the Residual Income model to produce unreliable estimates. Consider adjusting for OCI or using an alternative model.'
+      : undefined,
   };
 }

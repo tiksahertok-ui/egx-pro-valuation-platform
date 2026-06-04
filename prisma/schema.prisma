@@ -18,6 +18,7 @@ model Stock {
   price             Float
   sharesOutstanding Float
   beta              Float    @default(1.0)
+  egx30Beta         Float    @default(1.0)
   dividendYield     Float    @default(0)
   peRatio           Float    @default(0)
   pbRatio           Float    @default(0)
@@ -32,14 +33,17 @@ model Stock {
   description       String   @default("")
   descriptionAr     String   @default("")
   logo              String   @default("")
+  lastPriceAt       DateTime?
+  lastFinancialsAt  DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  financials    FinancialData[]
-  valuations    ValuationResult[]
-  reports       AnalystReport[]
-  priceHistory  PriceHistory[]
-  technicals    TechnicalIndicator[]
+  financials      FinancialData[]
+  valuations      ValuationResult[]
+  reports         AnalystReport[]
+  priceHistory    PriceHistory[]
+  technicals      TechnicalIndicator[]
+  portfolioHoldings PortfolioHolding[]
 }
 
 model FinancialData {
@@ -73,6 +77,13 @@ model FinancialData {
   changeInNWC         Float    @default(0)
   netBorrowing        Float    @default(0)
   taxRate             Float    @default(0.23)
+  dataSource          String   @default("manual")
+  reportingDate       DateTime @default(now())
+  reportType          String   @default("annual")
+  currency            String   @default("EGP")
+  isVerified          Boolean  @default(false)
+  lastUpdatedAt       DateTime @default(now()) @updatedAt
+  hasOCI              Boolean  @default(false)
   createdAt           DateTime @default(now())
 
   stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
@@ -112,15 +123,17 @@ model AnalystReport {
 }
 
 model PriceHistory {
-  id        String   @id @default(cuid())
-  stockId   String
-  date      String
-  open      Float
-  high      Float
-  low       Float
-  close     Float
-  volume    Float
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  stockId    String
+  date       String
+  open       Float
+  high       Float
+  low        Float
+  close      Float
+  volume     Float
+  source     String   @default("egx")
+  isAdjusted Boolean  @default(true)
+  createdAt  DateTime @default(now())
 
   stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
@@ -158,19 +171,21 @@ model TechnicalIndicator {
 }
 
 model SectorStats {
-  id          String   @id @default(cuid())
-  sector      String   @unique
-  avgPE       Float    @default(0)
-  avgPB       Float    @default(0)
-  avgEVEbitda Float    @default(0)
-  avgDivYield Float    @default(0)
-  avgROE      Float    @default(0)
-  avgROA      Float    @default(0)
-  avgDebtEquity Float  @default(0)
-  totalMarketCap Float @default(0)
-  numCompanies Int     @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  sector          String   @unique
+  avgPE           Float    @default(0)
+  avgPB           Float    @default(0)
+  avgEVEbitda     Float    @default(0)
+  avgDivYield     Float    @default(0)
+  avgROE          Float    @default(0)
+  avgROA          Float    @default(0)
+  avgDebtEquity   Float    @default(0)
+  totalMarketCap  Float    @default(0)
+  numCompanies    Int      @default(0)
+  computedAt      DateTime?
+  avgPS           Float    @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 model EconomicIndicator {
@@ -187,4 +202,49 @@ model EconomicIndicator {
   updatedAt       DateTime @updatedAt
 
   @@unique([name, date])
+}
+
+model MarketParams {
+  id                     Int      @id @default(autoincrement())
+  riskFreeRate           Float
+  baseEquityRiskPremium  Float    @default(0.045)
+  countryRiskPremium     Float
+  totalEquityRiskPremium Float
+  corporateTaxRate       Float
+  inflationRateEGP       Float
+  inflationRateUSD       Float    @default(0.025)
+  usdEgpRate             Float
+  effectiveDate          DateTime
+  source                 String   @default("manual")
+  createdAt              DateTime @default(now())
+}
+
+model Portfolio {
+  id          Int                @id @default(autoincrement())
+  name        String
+  userId      String
+  holdings    PortfolioHolding[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model PortfolioHolding {
+  id           Int       @id @default(autoincrement())
+  portfolioId  Int
+  stockId      String
+  quantity     Float
+  costBasis    Float
+  portfolio    Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  stock        Stock     @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String
+  role          String   @default("admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
