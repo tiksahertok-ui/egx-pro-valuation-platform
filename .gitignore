@@ -65,3 +65,7 @@ agent-ctx/
 
 # Download
 /download/prisma/fix-etel.ts
+download/
+examples/
+mini-services/
+Caddyfile
