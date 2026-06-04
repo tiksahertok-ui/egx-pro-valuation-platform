@@ -48,6 +48,10 @@ interface TechnicalData {
       description: string;
       strength: number;
     }>;
+    dataSufficiency?: {
+      availablePeriods: number;
+      insufficientIndicators: string[];
+    };
   };
   indicators: {
     trend: {
@@ -78,6 +82,35 @@ interface TechnicalData {
       obv: number;
     };
   };
+  supportResistance?: {
+    floorPivots: {
+      pivot: number; r1: number; r2: number; r3: number;
+      s1: number; s2: number; s3: number; type: string;
+    };
+    fibonacciPivots: {
+      pivot: number; r1: number; r2: number; r3: number;
+      s1: number; s2: number; s3: number; type: string;
+    };
+    swingLevels: { supports: number[]; resistances: number[] };
+  };
+  confluentSignal?: {
+    direction: 'BUY' | 'SELL' | 'NEUTRAL';
+    strength: number;
+    confluenceCount: number;
+    triggeringIndicators: string[];
+    caveat?: string;
+  };
+  tradePlans?: Array<{
+    horizonLabel: string;
+    entryZoneLow: number;
+    entryZoneHigh: number;
+    primaryTarget: number;
+    secondaryTarget: number;
+    stopLoss: number;
+    riskRewardRatio: number;
+    basisOfEntry: string;
+    basisOfTarget: string;
+  }>;
   storedTechnicals: {
     date: string;
     rsi14: number;
@@ -224,18 +257,16 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
 
   const { analysis, indicators, storedTechnicals } = data;
 
-  // Generate synthetic price history for chart (since actual priceHistory isn't in the API response)
-  // We'll create a reasonable representation using the available indicator data
-  const chartData = generateChartData(data.currentPrice, indicators);
+  // Use server-computed S/R, confluence, and trade plans when available; fallback to client-side computation
+  const pivotLevels = data.supportResistance?.floorPivots ?? (() => {
+    const chartD = generateChartData(data.currentPrice, indicators);
+    const prevH = chartD.length > 1 ? Math.max(...chartD.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 1.02;
+    const prevL = chartD.length > 1 ? Math.min(...chartD.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 0.98;
+    const prevC = chartD.length > 1 ? chartD[chartD.length - 2].close : data.currentPrice;
+    return calculateFloorPivots(prevH, prevL, prevC);
+  })();
 
-  // Calculate floor pivot points for S/R levels
-  const prevHigh = chartData.length > 1 ? Math.max(...chartData.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 1.02;
-  const prevLow = chartData.length > 1 ? Math.min(...chartData.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 0.98;
-  const prevClose = chartData.length > 1 ? chartData[chartData.length - 2].close : data.currentPrice;
-  const pivotLevels: PivotLevels = calculateFloorPivots(prevHigh, prevLow, prevClose);
-
-  // Generate confluent signal
-  const confluentSignal: ConfluentSignal = generateConfluentSignal({
+  const confluentSignal: ConfluentSignal = data.confluentSignal ?? generateConfluentSignal({
     rsi: indicators.momentum.rsi14,
     macdHistogram: indicators.momentum.macdHistogram,
     macdSignalCross: indicators.momentum.macdHistogram > 0 ? 'bullish' : 'bearish',
@@ -246,10 +277,12 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
     bollingerPosition: data.currentPrice >= indicators.volatility.bbUpper ? 'overbought' : data.currentPrice <= indicators.volatility.bbLower ? 'oversold' : 'neutral',
   });
 
-  // Generate trade plans for three horizons
-  const tradePlans: TradePlan[] = (['short', 'medium', 'long'] as InvestmentHorizon[]).map(
+  const tradePlans: TradePlan[] = data.tradePlans ?? (['short', 'medium', 'long'] as InvestmentHorizon[]).map(
     (horizon) => generateTradePlan(data.currentPrice, indicators.volatility.atr14, pivotLevels, data.currentPrice * 1.2, horizon)
   );
+
+  // Generate synthetic price history for chart
+  const chartData = generateChartData(data.currentPrice, indicators);
 
   // Data sufficiency checks for key indicators
   const sma200Sufficiency = validateDataSufficiency('SMA200', data.priceHistoryLength || 0);

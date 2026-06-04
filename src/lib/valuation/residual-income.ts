@@ -4,6 +4,8 @@
 // Terminal value = 0 (conservative) or continuing RI
 
 import { FinancialDataInput, ValuationOutput } from './dcf-fcff';
+import { calculateCostOfEquityEgypt } from './wacc';
+import { EGYPT_MARKET_PARAMS, EgyptMarketParams } from './egyptMarketParams';
 
 export interface ResidualIncomeParams {
   financials: FinancialDataInput;
@@ -12,13 +14,6 @@ export interface ResidualIncomeParams {
   beta: number;
   projectionYears?: number;
   terminalResidualIncome?: 'zero' | 'continuing' | 'decay';
-}
-
-/**
- * Calculate Cost of Equity using CAPM
- */
-function calculateCostOfEquity(beta: number, riskFreeRate: number = 0.27, marketRiskPremium: number = 0.08): number {
-  return riskFreeRate + beta * marketRiskPremium;
 }
 
 export function residualIncome(params: ResidualIncomeParams): ValuationOutput {
@@ -31,7 +26,7 @@ export function residualIncome(params: ResidualIncomeParams): ValuationOutput {
     terminalResidualIncome = 'decay',
   } = params;
 
-  const baseKe = calculateCostOfEquity(beta);
+  const baseKe = calculateCostOfEquityEgypt(beta);
 
   // Book Value per Share
   const bvps = latestFinancials.sharesOutstanding > 0

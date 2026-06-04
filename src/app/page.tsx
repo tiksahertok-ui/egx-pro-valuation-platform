@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -20,11 +21,34 @@ import {
   Briefcase,
 } from 'lucide-react';
 import DashboardView from '@/components/egx/dashboard-view';
-import StockDetailView from '@/components/egx/stock-detail-view';
-import PortfolioPanel from '@/components/egx/portfolio-panel';
 import LegalDisclaimer from '@/components/egx/legal-disclaimer';
 import DataFreshnessIndicator from '@/components/egx/data-freshness-indicator';
 import { getMarketStatus, type MarketStatus } from '@/lib/market-hours';
+
+// Dynamic imports for heavy components (code splitting)
+const StockDetailView = dynamic(() => import('@/components/egx/stock-detail-view'), {
+  loading: () => (
+    <div className="p-4 space-y-4">
+      <Skeleton className="h-32 w-full bg-slate-800 rounded-xl" />
+      <Skeleton className="h-10 w-full bg-slate-800 max-w-xl" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Skeleton className="h-64 bg-slate-800 rounded-xl" />
+        <Skeleton className="h-64 bg-slate-800 rounded-xl" />
+      </div>
+    </div>
+  ),
+  ssr: false,
+});
+
+const PortfolioPanel = dynamic(() => import('@/components/egx/portfolio-panel'), {
+  loading: () => (
+    <div className="p-4 space-y-4">
+      <Skeleton className="h-20 w-full bg-slate-800 rounded-xl" />
+      <Skeleton className="h-64 w-full bg-slate-800 rounded-xl" />
+    </div>
+  ),
+  ssr: false,
+});
 
 // ─── Types ───────────────────────────────────────────────
 interface Stock {
@@ -82,11 +106,14 @@ export default function Home() {
   const [sidebarView, setSidebarView] = useState<
     'watchlist' | 'sectors' | 'economic' | 'portfolio'
   >('watchlist');
-  const [marketStatus, setMarketStatus] = useState<MarketStatus>(() => getMarketStatus());
+  // Initialize market status as null to avoid SSR/client hydration mismatch
+  // (server and client are in different timezones, causing currentTimeCairo to differ)
+  const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  // EGX market status — refresh every 30s
+  // EGX market status — set on client only, refresh every 30s
   useEffect(() => {
+    setMarketStatus(getMarketStatus());
     const interval = setInterval(() => {
       setMarketStatus(getMarketStatus());
     }, 30000);
@@ -290,35 +317,35 @@ export default function Home() {
           <div className='flex items-center gap-2'>
             <div
               className={`w-2 h-2 rounded-full ${
-                marketStatus.isOpen
+                marketStatus?.isOpen
                   ? 'bg-emerald-400 egx-pulse'
-                  : marketStatus.currentSession === 'weekend'
+                  : marketStatus?.currentSession === 'weekend'
                   ? 'bg-slate-500'
                   : 'bg-amber-400'
               }`}
             />
             <span
               className={`text-xs hidden sm:inline ${
-                marketStatus.isOpen
+                marketStatus?.isOpen
                   ? 'text-emerald-400'
-                  : marketStatus.currentSession === 'weekend'
+                  : marketStatus?.currentSession === 'weekend'
                   ? 'text-slate-500'
                   : 'text-amber-400'
               }`}
             >
               EGX{' '}
-              {marketStatus.currentSession === 'continuous'
+              {marketStatus?.currentSession === 'continuous'
                 ? 'Trading'
-                : marketStatus.currentSession === 'pre-open'
+                : marketStatus?.currentSession === 'pre-open'
                 ? 'Pre-Open'
-                : marketStatus.currentSession === 'closing-auction'
+                : marketStatus?.currentSession === 'closing-auction'
                 ? 'Closing Auction'
-                : marketStatus.currentSession === 'weekend'
+                : marketStatus?.currentSession === 'weekend'
                 ? 'Closed (Weekend)'
                 : 'Closed'}
             </span>
             <span className='text-xs text-slate-500 hidden md:inline'>
-              {marketStatus.currentTimeCairo}
+              {marketStatus?.currentTimeCairo ?? '—'}
             </span>
           </div>
           <DataFreshnessIndicator lastPriceAt={null} lastFinancialsAt={null} />
@@ -509,8 +536,8 @@ export default function Home() {
                     { label: 'CBE Rate', value: '19.0%', dir: 'down' },
                     { label: 'USD/EGP', value: '51.82', dir: 'up' },
                     { label: 'Inflation', value: '14.9%', dir: 'down' },
-                    { label: 'GDP Growth', value: '3.8%', dir: 'up' },
-                    { label: 'Reserves', value: '$47.2B', dir: 'up' },
+                    { label: 'GDP Growth', value: '5.3%', dir: 'up' },
+                    { label: 'Reserves', value: '$53.0B', dir: 'up' },
                   ].map((item) => (
                     <div
                       key={item.label}

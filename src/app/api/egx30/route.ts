@@ -1,13 +1,26 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { CURRENT_EGX30, getIndexRelativePerformance } from '@/lib/valuation/egx30'
 import { requireAuth } from '@/lib/auth/requireAuth'
 import { db } from '@/lib/db'
+import { z } from 'zod'
 
-export async function GET() {
+const EGX30QuerySchema = z.object({
+  ticker: z.string().min(2).max(10).optional(),
+}).optional()
+
+export async function GET(request: NextRequest) {
   const authError = await requireAuth()
   if (authError) return authError.error
 
   try {
+    // Validate query parameters
+    const url = new URL(request.url)
+    const queryParams = Object.fromEntries(url.searchParams.entries())
+    const parsed = EGX30QuerySchema.safeParse(queryParams)
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, { status: 400 })
+    }
+
     // Get all stocks with their valuations for relative performance
     const stocks = await db.stock.findMany({
       select: {

@@ -1,7 +1,11 @@
 // GET /api/technical/[ticker] - Get technical analysis with signals
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { runTechnicalAnalysis, PriceDataPoint } from '@/lib/technical';
+import { runTechnicalAnalysis, PriceDataPoint, DataSufficiencyInfo } from '@/lib/technical';
+import { calculateFloorPivots, calculateFibonacciPivots, findSwingHighsLows, PivotLevels } from '@/lib/technical/supportResistance';
+import { generateConfluentSignal, ConfluentSignal } from '@/lib/technical/signals';
+import { generateTradePlan, TradePlan, InvestmentHorizon } from '@/lib/technical/tradePlan';
+import { validateDataSufficiency } from '@/lib/technical/validation';
 import { z } from 'zod';
 import { requireAuth } from '@/lib/auth/requireAuth';
 
@@ -34,6 +38,11 @@ export async function GET(
           orderBy: { date: 'desc' },
           take: 30,
         },
+        valuations: {
+          where: { model: 'Composite (Weighted)' },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
 
@@ -60,6 +69,46 @@ export async function GET(
     // Also get the latest stored technical indicators
     const latestTechnicals = stock.technicals[0];
 
+    // ─── Support/Resistance via Pivot Points ────────────────
+    const prices = stock.priceHistory;
+    const lastPrice = prices[prices.length - 1];
+    const secondLastPrice = prices.length >= 2 ? prices[prices.length - 2] : lastPrice;
+    const prevHigh = secondLastPrice.high;
+    const prevLow = secondLastPrice.low;
+    const prevClose = secondLastPrice.close;
+
+    const floorPivots: PivotLevels = calculateFloorPivots(prevHigh, prevLow, prevClose);
+    const fibonacciPivots: PivotLevels = calculateFibonacciPivots(prevHigh, prevLow, prevClose);
+
+    // Swing highs/lows for dynamic S/R
+    const swingLevels = prices.length >= 11
+      ? findSwingHighsLows(
+          prices.map(p => ({ high: p.high, low: p.low, date: p.date })),
+          5
+        )
+      : { supports: [] as number[], resistances: [] as number[] };
+
+    // ─── Confluence-Weighted Signal Generation ──────────────
+    const confluentSignal: ConfluentSignal = generateConfluentSignal({
+      rsi: analysis.rsi14,
+      macdHistogram: analysis.macdHistogram,
+      macdSignalCross: analysis.macdHistogram > 0 ? 'bullish' : 'bearish',
+      priceVsSMA50: stock.price > analysis.sma50 && analysis.sma50 > 0 ? 'above' : analysis.sma50 > 0 ? 'below' : null,
+      priceVsSMA200: analysis.sma200 > 0 ? (stock.price > analysis.sma200 ? 'above' : 'below') : null,
+      adx: analysis.adx14,
+      stochasticK: analysis.stochK,
+      bollingerPosition: stock.price >= analysis.bbUpper ? 'overbought' : stock.price <= analysis.bbLower ? 'oversold' : 'neutral',
+    });
+
+    // ─── Entry/Exit/Stop-Loss Trade Plans ───────────────────
+    const fairValue = stock.valuations[0]?.fairValue ?? stock.price * 1.2;
+    const tradePlans: TradePlan[] = (['short', 'medium', 'long'] as InvestmentHorizon[]).map(
+      horizon => generateTradePlan(stock.price, analysis.atr14, floorPivots, fairValue, horizon)
+    );
+
+    // ─── Data Sufficiency Info ──────────────────────────────
+    const dataSufficiency: DataSufficiencyInfo | undefined = analysis.dataSufficiency;
+
     return NextResponse.json({
       ticker: stock.ticker,
       name: stock.name,
@@ -69,6 +118,7 @@ export async function GET(
         overallSignal: analysis.overallSignal,
         signalScore: analysis.signalScore,
         signals: analysis.signals,
+        dataSufficiency,
       },
       indicators: {
         trend: {
@@ -99,6 +149,13 @@ export async function GET(
           obv: analysis.obv,
         },
       },
+      supportResistance: {
+        floorPivots,
+        fibonacciPivots,
+        swingLevels,
+      },
+      confluentSignal,
+      tradePlans,
       storedTechnicals: latestTechnicals ? {
         date: latestTechnicals.date,
         rsi14: latestTechnicals.rsi14,
