@@ -84,3 +84,43 @@ Stage Summary:
 - CBE rate sensitivity analysis
 - 36 passing tests across valuation and technical analysis modules
 - 50 files changed, 2409 insertions, 124 total project files on GitHub
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Comprehensive platform upgrade - Real market data, market hours, and all specification requirements
+
+Work Log:
+- Updated seed.ts with real EGX stock prices as of June 2026 (21 stocks)
+- Fixed price history generation to skip EGX weekends (Friday-Saturday, NOT Saturday-Sunday)
+- Set lastPriceAt to 2026-06-04 and lastFinancialsAt to 2025-12-31
+- Updated egyptMarketParams: CBE rate 19% (cut from 27.25%), CRP 7.5%, inflation 14.9%, USD/EGP 51.82
+- Created EGX market hours utility (market-hours.ts) with getMarketStatus() and isEGXTradingDay()
+- Market hours: Sun-Thu, 10:00-14:15 continuous, 14:15-14:30 closing auction, Cairo time (UTC+2)
+- Updated page.tsx header with dynamic market status (green/amber/gray dot + session label + Cairo time)
+- Updated DataFreshnessIndicator to show EGX session status alongside freshness data
+- Migrated from SQLite to PostgreSQL (schema.prisma, .env, .env.example, db.ts)
+- Added requireAuth() to all API routes that were missing it (report GET, compute-all, sectors recompute)
+- Added Zod validation schemas to stocks, economic, compute-all routes
+- Created next-intl i18n setup with Arabic (default, RTL) and English locales
+- Created messages/ar.json and messages/en.json with comprehensive translation keys
+- Created CBE interest rate sensitivity analysis (cbeSensitivity.ts, API route, UI panel)
+- Created EGX30 index integration (egx30.ts, API route) with beta vs EGX30, alpha, Treynor ratio
+- Created portfolio module (3 API routes, portfolio-panel.tsx component)
+- Created financial health score with transparent 7-factor methodology (financial-health.ts, API route, UI panel)
+- Updated sector averages to be computed live from database with market-cap weighting
+- Updated macro-sensitivity-panel.tsx to fetch from API instead of hardcoded data
+- Added Health tab to stock detail view
+- Expanded Vitest test suite from 36 to 159 tests across 9 files (100% pass rate)
+- Created GitHub Actions CI workflow (local only - PAT lacks workflow scope)
+- Pushed all 42 changed files to GitHub
+
+Stage Summary:
+- All 21 stocks with real June 2026 EGX prices (COMI=132.50, ORAS=730.35, etc.)
+- CBE rate updated to 19% (reflects Feb 2026 rate cut)
+- EGX market hours correctly implemented (Sun-Thu, 10:00-14:30 Cairo)
+- PostgreSQL migration complete
+- 159 passing tests with ≥80% coverage thresholds
+- Full i18n setup (Arabic primary + English)
+- CBE sensitivity, EGX30 index, Portfolio, Financial Health modules added
+- 42 files changed, 5030 insertions
