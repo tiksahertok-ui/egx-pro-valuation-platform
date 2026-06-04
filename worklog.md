@@ -34,3 +34,53 @@ Stage Summary:
 - Arabic and English support
 - All API routes returning 200 with correct data
 - Lint passes cleanly
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: Comprehensive platform upgrade - Parts 1-7 (Critical fixes, enhancements, testing)
+
+Work Log:
+- Created Egypt-specific market parameters module (egyptMarketParams.ts) with CBE rates, Damodaran ERP/CRP
+- Created sector-aware model weights (sectorWeights.ts) for 8 sectors with proper allocation
+- Created Egypt-specific WACC module (wacc.ts) with CAPM, WACC, terminal growth validation
+- Updated DCF FCFF and DCF FCFE models to use Egypt-aware WACC (Rf=27.5%, ERP=13%, terminal growth=8% for EGP)
+- Split relative valuation into separate P/E and P/B exports
+- Updated composite model to use sector-specific weights from sectorWeights.ts
+- Updated metrics engine to use EGYPT_MARKET_PARAMS and Egypt-aware cost of equity
+- Added Prisma schema: MarketParams, Portfolio, PortfolioHolding, User models
+- Added schema fields: egx30Beta, lastPriceAt, lastFinancialsAt, dataSource, reportingDate, reportType, currency, isVerified, hasOCI, source, isAdjusted, computedAt, avgPS
+- Created data ingestion service with Yahoo Finance integration and CSV import
+- Created scheduled data refresh API endpoint with cron secret
+- Implemented NextAuth.js authentication with credentials provider
+- Added requireAuth() guard on all API routes (except public stock list)
+- Added Zod input validation on all API route parameters
+- Created support/resistance module (floor pivots, Fibonacci pivots, swing highs/lows)
+- Created confluence signal generation (multi-indicator BUY/SELL/NEUTRAL with strength 1-5)
+- Created trade plan generator (entry zone, targets, stop-loss, R:R for short/medium/long)
+- Created data sufficiency validation module (minimum periods per indicator)
+- Updated technical analysis to include S/R dashed lines on charts, confluence signals, trade plans
+- Added AI report rate limiting (5/stock/day) and 24h caching with forceRefresh option
+- Added residual income clean surplus violation warning for OCI companies
+- Created sector recompute endpoint with market-cap-weighted averages
+- Created UI components: LegalDisclaimer (bilingual EN/AR), SignalLabel, DataFreshnessIndicator, InsufficientDataBadge, ConfluenceSignalDisplay, TradePlanCard, MacroSensitivityPanel
+- Integrated all new components into existing pages (valuation, technical, AI report, sector panels)
+- Added currency convention selector and terminal growth warnings to valuation panel
+- Added Macro Sensitivity tab to stock detail view
+- Created Vitest test suite: 6 test files, 36 tests, all passing
+- Created GitHub Actions CI workflow
+- Pushed all changes to GitHub repository
+
+Stage Summary:
+- Egypt-specific WACC/CAPM recalibration (CBE T-bill Rf, Damodaran CRP)
+- Sector-aware composite valuation weights
+- Full authentication on API routes
+- Zod input validation on all endpoints
+- Support/Resistance with pivot points on charts
+- Confluence signal generation with strength indicator
+- Trade plans with entry/target/stop-loss for 3 horizons
+- Data provenance and ingestion pipeline
+- Legal disclaimers (bilingual) on footer, reports, and valuation outputs
+- CBE rate sensitivity analysis
+- 36 passing tests across valuation and technical analysis modules
+- 50 files changed, 2409 insertions, 124 total project files on GitHub
