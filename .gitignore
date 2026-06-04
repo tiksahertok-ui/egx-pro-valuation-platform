@@ -64,4 +64,4 @@ server.log
 agent-ctx/
 
 # Download
-/download/
+/download/prisma/fix-etel.ts
