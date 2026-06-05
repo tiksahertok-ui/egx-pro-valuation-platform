@@ -805,6 +805,11 @@ async function main() {
         data: {
           stockId: stock.id,
           ...financialData,
+          dataSource: 'estimated',  // Mark as estimated — replace with verified filings
+          reportingDate: new Date(year, 11, 31),  // Dec 31 of the fiscal year
+          reportType: 'annual',
+          currency: 'EGP',
+          isVerified: false,  // Set to true only after cross-referencing with EGX filings
         }
       });
     }
@@ -821,6 +826,8 @@ async function main() {
           low: ph.low,
           close: ph.close,
           volume: ph.volume,
+          source: 'simulated',  // Mark as simulated — replace with Yahoo Finance / EGX data
+          isAdjusted: true,
         }
       });
     }

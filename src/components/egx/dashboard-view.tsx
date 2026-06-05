@@ -347,7 +347,7 @@ export default function DashboardView({
           </CardTitle>
         </CardHeader>
         <CardContent className='px-4 pb-4'>
-          <div className='h-64'>
+          <div className='h-48 sm:h-64'>
             <ResponsiveContainer width='100%' height='100%'>
               <BarChart data={sectorChartData} layout='vertical' margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
                 <CartesianGrid strokeDasharray='3 3' stroke='#1e293b' horizontal={false} />
@@ -390,18 +390,54 @@ export default function DashboardView({
           </CardTitle>
         </CardHeader>
         <CardContent className='px-4 pb-4'>
-          <div className='overflow-x-auto'>
+          {/* Mobile: Scrollable card list */}
+          <div className='sm:hidden space-y-2'>
+            {stocks.map((stock) => (
+              <div
+                key={stock.ticker}
+                className='p-3 rounded-lg border cursor-pointer transition-colors hover:border-cyan-500/30'
+                style={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}
+                onClick={() => onSelectStock(stock.ticker)}
+              >
+                <div className='flex items-center justify-between mb-1.5'>
+                  <div className='flex items-center gap-2'>
+                    <span className='mono-num font-semibold text-cyan-400 text-sm'>{stock.ticker}</span>
+                    <Badge variant='outline' className='text-[10px] h-4 bg-slate-800/50 border-slate-700 text-slate-400'>
+                      {stock.sector}
+                    </Badge>
+                  </div>
+                  {stock.upside !== null && (
+                    <span className={`mono-num text-xs font-medium ${stock.upside >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {formatPercent(stock.upside)}
+                    </span>
+                  )}
+                </div>
+                <div className='flex items-center justify-between'>
+                  <span className='text-xs text-slate-400 truncate me-2'>{stock.name}</span>
+                  <span className='mono-num text-sm text-white shrink-0'>{formatPrice(stock.price)}</span>
+                </div>
+                <div className='flex items-center gap-3 mt-1.5 text-[10px] text-slate-500'>
+                  <span>P/E: {stock.peRatio?.toFixed(1) ?? '-'}x</span>
+                  {stock.fairValue && <span>FV: {stock.fairValue.toFixed(2)}</span>}
+                  {stock.confidence !== null && <span>Conf: {(stock.confidence * 100).toFixed(0)}%</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: Table view */}
+          <div className='hidden sm:block overflow-x-auto'>
             <table className='w-full text-xs'>
               <thead>
                 <tr className='border-b' style={{ borderColor: '#1e293b' }}>
-                  <th className='text-left py-2 px-2 text-slate-500 font-medium'>Ticker</th>
-                  <th className='text-left py-2 px-2 text-slate-500 font-medium'>Name</th>
-                  <th className='text-left py-2 px-2 text-slate-500 font-medium hidden sm:table-cell'>Sector</th>
-                  <th className='text-right py-2 px-2 text-slate-500 font-medium'>Price</th>
-                  <th className='text-right py-2 px-2 text-slate-500 font-medium'>P/E</th>
-                  <th className='text-right py-2 px-2 text-slate-500 font-medium'>Fair Value</th>
-                  <th className='text-right py-2 px-2 text-slate-500 font-medium'>Upside</th>
-                  <th className='text-right py-2 px-2 text-slate-500 font-medium'>Confidence</th>
+                  <th className='text-start py-2 px-2 text-slate-500 font-medium'>Ticker</th>
+                  <th className='text-start py-2 px-2 text-slate-500 font-medium'>Name</th>
+                  <th className='text-start py-2 px-2 text-slate-500 font-medium hidden md:table-cell'>Sector</th>
+                  <th className='text-end py-2 px-2 text-slate-500 font-medium'>Price</th>
+                  <th className='text-end py-2 px-2 text-slate-500 font-medium'>P/E</th>
+                  <th className='text-end py-2 px-2 text-slate-500 font-medium'>Fair Value</th>
+                  <th className='text-end py-2 px-2 text-slate-500 font-medium'>Upside</th>
+                  <th className='text-end py-2 px-2 text-slate-500 font-medium'>Confidence</th>
                 </tr>
               </thead>
               <tbody>
@@ -423,7 +459,7 @@ export default function DashboardView({
                         {stock.nameAr}
                       </div>
                     </td>
-                    <td className='py-2 px-2 hidden sm:table-cell'>
+                    <td className='py-2 px-2 hidden md:table-cell'>
                       <Badge
                         variant='outline'
                         className='text-[10px] h-4 bg-slate-800/50 border-slate-700 text-slate-400'
@@ -431,16 +467,16 @@ export default function DashboardView({
                         {stock.sector}
                       </Badge>
                     </td>
-                    <td className='py-2 px-2 text-right mono-num text-slate-200'>
+                    <td className='py-2 px-2 text-end mono-num text-slate-200'>
                       {stock.price.toFixed(2)}
                     </td>
-                    <td className='py-2 px-2 text-right mono-num text-slate-400'>
+                    <td className='py-2 px-2 text-end mono-num text-slate-400'>
                       {stock.peRatio?.toFixed(1) ?? '-'}x
                     </td>
-                    <td className='py-2 px-2 text-right mono-num text-slate-300'>
+                    <td className='py-2 px-2 text-end mono-num text-slate-300'>
                       {stock.fairValue ? stock.fairValue.toFixed(2) : '-'}
                     </td>
-                    <td className='py-2 px-2 text-right'>
+                    <td className='py-2 px-2 text-end'>
                       {stock.upside !== null ? (
                         <span
                           className={`mono-num font-medium ${
@@ -455,7 +491,7 @@ export default function DashboardView({
                         <span className='text-slate-600'>-</span>
                       )}
                     </td>
-                    <td className='py-2 px-2 text-right'>
+                    <td className='py-2 px-2 text-end'>
                       {stock.confidence !== null ? (
                         <div className='flex items-center justify-end gap-1'>
                           <div className='w-10 h-1.5 rounded-full bg-slate-800 overflow-hidden'>

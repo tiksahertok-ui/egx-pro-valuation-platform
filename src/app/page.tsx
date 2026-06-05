@@ -213,10 +213,10 @@ export default function Home() {
 
         {/* Search */}
         <div className='relative flex-1 max-w-md' ref={searchRef}>
-          <Search className='absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
+          <Search className='absolute start-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400' />
           <Input
             placeholder='Search stocks... (e.g. COMI, CIB)'
-            className='pl-9 h-8 text-sm bg-slate-800/60 border-slate-700 text-slate-200 placeholder:text-slate-500 focus:border-cyan-500 focus:ring-cyan-500/20'
+            className='ps-9 h-8 text-sm bg-slate-800/60 border-slate-700 text-slate-200 placeholder:text-slate-500 focus:border-cyan-500 focus:ring-cyan-500/20'
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
@@ -591,6 +591,43 @@ export default function Home() {
 
       {/* ─── Footer ──────────────────────────────────────── */}
       <LegalDisclaimer variant='footer' />
+
+      {/* ─── Mobile Bottom Tab Bar ──────────────────────── */}
+      <div className='md:hidden fixed bottom-0 inset-x-0 z-50 border-t' style={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }}>
+        <div className='flex items-center justify-around h-14'>
+          <button
+            onClick={goBack}
+            className={`flex flex-col items-center gap-0.5 text-[10px] ${currentView === 'dashboard' ? 'text-cyan-400' : 'text-slate-500'}`}
+          >
+            <BarChart3 className='w-5 h-5' />
+            <span>Overview</span>
+          </button>
+          <button
+            onClick={() => setSidebarView('sectors')}
+            className={`flex flex-col items-center gap-0.5 text-[10px] ${sidebarView === 'sectors' && currentView === 'dashboard' ? 'text-cyan-400' : 'text-slate-500'}`}
+          >
+            <Globe2 className='w-5 h-5' />
+            <span>Sectors</span>
+          </button>
+          <button
+            onClick={() => {
+              setCurrentView('portfolio');
+              setSidebarView('portfolio');
+            }}
+            className={`flex flex-col items-center gap-0.5 text-[10px] ${currentView === 'portfolio' ? 'text-cyan-400' : 'text-slate-500'}`}
+          >
+            <Briefcase className='w-5 h-5' />
+            <span>Portfolio</span>
+          </button>
+          <button
+            onClick={() => setSidebarView('economic')}
+            className={`flex flex-col items-center gap-0.5 text-[10px] ${sidebarView === 'economic' && currentView === 'dashboard' ? 'text-cyan-400' : 'text-slate-500'}`}
+          >
+            <Landmark className='w-5 h-5' />
+            <span>Economic</span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

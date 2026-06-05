@@ -3,8 +3,43 @@
 import React, { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { ChevronDown, Heart, Info } from 'lucide-react';
+
+/* ───────────────────── New public interfaces ─────────────────── */
+
+export interface HealthScoreBreakdown {
+  metric: string;
+  label: string;
+  labelAr: string;
+  value: number;       // actual score awarded
+  maxValue: number;    // maximum possible score
+  weight: number;      // 0–1
+  description: string;
+  descriptionAr: string;
+}
+
+export interface HealthScorePanelProps {
+  score: number;       // 0–100 overall composite score
+  breakdown: HealthScoreBreakdown[];
+}
+
+/* ───────────── Backward-compat wrapper interface ─────────────── */
+
+interface HealthScorePanelWithTickerProps {
+  /** Pass a ticker to auto-fetch from /api/health – backward compat */
+  ticker?: string;
+  /** Or pass score + breakdown directly */
+  score?: number;
+  breakdown?: HealthScoreBreakdown[];
+}
+
+/* ───────────────────── Legacy API response shape ─────────────── */
 
 interface HealthFactor {
   name: string;
@@ -18,16 +53,20 @@ interface HealthFactor {
 
 interface FinancialHealthResult {
   overallScore: number;
-  rating: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'Distressed';
+  rating: string;
   ratingAr: string;
   factors: HealthFactor[];
   methodology: string;
   methodologyAr: string;
 }
 
-interface HealthScorePanelProps {
-  ticker: string;
-}
+/* ───────────────────── Colour helpers ────────────────────────── */
+
+const ratingFromScore = (s: number) =>
+  s >= 80 ? 'Excellent' : s >= 65 ? 'Good' : s >= 45 ? 'Fair' : s >= 25 ? 'Poor' : 'Distressed';
+
+const ratingArFromScore = (s: number) =>
+  s >= 80 ? 'ممتاز' : s >= 65 ? 'جيد' : s >= 45 ? 'مقبول' : s >= 25 ? 'ضعيف' : 'حرج';
 
 const ratingColors: Record<string, string> = {
   Excellent: 'text-emerald-400',
@@ -45,22 +84,52 @@ const ratingBgColors: Record<string, string> = {
   Distressed: 'bg-red-500/10 border-red-500/30',
 };
 
-const scoreBarColors = (score: number): string => {
-  if (score >= 75) return 'bg-emerald-500';
-  if (score >= 55) return 'bg-cyan-500';
-  if (score >= 40) return 'bg-amber-500';
-  if (score >= 25) return 'bg-orange-500';
+/** Progress-bar colour based on percentage achieved */
+const barColor = (pct: number): string => {
+  if (pct >= 0.75) return 'bg-emerald-500';
+  if (pct >= 0.55) return 'bg-cyan-500';
+  if (pct >= 0.40) return 'bg-amber-500';
+  if (pct >= 0.25) return 'bg-orange-500';
   return 'bg-red-500';
 };
 
-function CircularGauge({ score, rating }: { score: number; rating: string }) {
+const gaugeStroke = (score: number): string => {
+  if (score >= 75) return '#10b981';
+  if (score >= 55) return '#06b6d4';
+  if (score >= 40) return '#f59e0b';
+  if (score >= 25) return '#f97316';
+  return '#ef4444';
+};
+
+/* ───────────── Convert legacy API result → new props ─────────── */
+
+function transformHealthResult(result: FinancialHealthResult): {
+  score: number;
+  breakdown: HealthScoreBreakdown[];
+} {
+  const breakdown: HealthScoreBreakdown[] = result.factors.map((f) => ({
+    metric: f.name.replace(/[^a-zA-Z]/g, '_').toLowerCase(),
+    label: f.name,
+    labelAr: f.nameAr,
+    value: f.score,              // 0–100 score achieved
+    maxValue: 100,               // max possible per factor
+    weight: f.weight,
+    description: f.interpretation,
+    descriptionAr: f.interpretationAr,
+  }));
+
+  return { score: result.overallScore, breakdown };
+}
+
+/* ───────────────────── Circular gauge ────────────────────────── */
+
+function CircularGauge({ score }: { score: number }) {
   const radius = 58;
   const stroke = 8;
   const normalizedRadius = radius - stroke / 2;
   const circumference = normalizedRadius * 2 * Math.PI;
   const strokeDashoffset = circumference - (score / 100) * circumference;
-
-  const gaugeColor = score >= 75 ? '#10b981' : score >= 55 ? '#06b6d4' : score >= 40 ? '#f59e0b' : score >= 25 ? '#f97316' : '#ef4444';
+  const rating = ratingFromScore(score);
 
   return (
     <div className="relative inline-flex items-center justify-center">
@@ -74,7 +143,7 @@ function CircularGauge({ score, rating }: { score: number; rating: string }) {
           cy={radius}
         />
         <circle
-          stroke={gaugeColor}
+          stroke={gaugeStroke(score)}
           fill="transparent"
           strokeWidth={stroke}
           strokeLinecap="round"
@@ -96,13 +165,112 @@ function CircularGauge({ score, rating }: { score: number; rating: string }) {
   );
 }
 
-export default function HealthScorePanel({ ticker }: HealthScorePanelProps) {
-  const [healthData, setHealthData] = useState<FinancialHealthResult | null>(null);
-  const [loading, setLoading] = useState(true);
+/* ───────────────────── Metric row ────────────────────────────── */
+
+function MetricRow({ item }: { item: HealthScoreBreakdown }) {
+  const pct = item.maxValue > 0 ? item.value / item.maxValue : 0;
+  const ratingKey =
+    pct >= 0.75
+      ? 'Excellent'
+      : pct >= 0.55
+        ? 'Good'
+        : pct >= 0.40
+          ? 'Fair'
+          : pct >= 0.25
+            ? 'Poor'
+            : 'Distressed';
+
+  return (
+    <div className="rounded-lg p-3" style={{ backgroundColor: '#0f172a' }}>
+      {/* Row 1 — label, Arabic label, badge, weight */}
+      <div className="flex items-start justify-between mb-1.5">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-slate-200 truncate">
+              {item.label}
+            </span>
+            <span className="text-xs text-slate-500" dir="rtl">
+              {item.labelAr}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 ml-2">
+          <Badge
+            variant="outline"
+            className={`text-[10px] h-5 border ${ratingBgColors[ratingKey]} ${ratingColors[ratingKey]}`}
+          >
+            {ratingKey}
+          </Badge>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="mono-num text-[10px] text-cyan-400 cursor-help">
+                W: {(item.weight * 100).toFixed(0)}%
+              </span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="top"
+              className="bg-slate-900 border-slate-700 text-xs text-slate-300"
+            >
+              Weight in composite score
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Row 2 — score / max + colour-coded progress bar */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2.5 rounded-full bg-slate-800 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ease-out ${barColor(pct)}`}
+            style={{ width: `${Math.max(pct * 100, 2)}%` }}
+          />
+        </div>
+        <span className="mono-num text-xs text-slate-200 shrink-0 w-16 text-right">
+          {item.value.toFixed(1)}{' '}
+          <span className="text-slate-500">/ {item.maxValue.toFixed(0)}</span>
+        </span>
+      </div>
+
+      {/* Row 3 — description */}
+      <p className="text-[11px] text-slate-400 leading-relaxed mt-1.5">
+        {item.description}
+      </p>
+      <p className="text-[11px] text-slate-500 leading-relaxed" dir="rtl">
+        {item.descriptionAr}
+      </p>
+    </div>
+  );
+}
+
+/* ───────────────────── Main component ────────────────────────── */
+
+export default function HealthScorePanel(props: HealthScorePanelWithTickerProps) {
+  const { ticker } = props;
+
+  // State for the fetched-then-transformed path
+  const [resolvedScore, setResolvedScore] = useState<number | null>(
+    props.score ?? null
+  );
+  const [resolvedBreakdown, setResolvedBreakdown] = useState<
+    HealthScoreBreakdown[] | null
+  >(props.breakdown ?? null);
+  const [loading, setLoading] = useState(!props.score && !!ticker);
   const [error, setError] = useState<string | null>(null);
   const [methodologyOpen, setMethodologyOpen] = useState(false);
+  const [methodology, setMethodology] = useState<{
+    en: string;
+    ar: string;
+  } | null>(null);
 
   useEffect(() => {
+    if (props.score !== undefined && props.breakdown) {
+      setResolvedScore(props.score);
+      setResolvedBreakdown(props.breakdown);
+      return;
+    }
+    if (!ticker) return;
+
     const fetchHealth = async () => {
       setLoading(true);
       setError(null);
@@ -113,7 +281,11 @@ export default function HealthScorePanel({ ticker }: HealthScorePanelProps) {
           throw new Error(data.error || 'Failed to fetch health score');
         }
         const data = await res.json();
-        setHealthData(data.health);
+        const health: FinancialHealthResult = data.health;
+        const transformed = transformHealthResult(health);
+        setResolvedScore(transformed.score);
+        setResolvedBreakdown(transformed.breakdown);
+        setMethodology({ en: health.methodology, ar: health.methodologyAr });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
       } finally {
@@ -121,8 +293,9 @@ export default function HealthScorePanel({ ticker }: HealthScorePanelProps) {
       }
     };
     fetchHealth();
-  }, [ticker]);
+  }, [ticker, props.score, props.breakdown]);
 
+  /* ─── Loading ────────────────────────────────────────────── */
   if (loading) {
     return (
       <div className="space-y-4">
@@ -133,14 +306,15 @@ export default function HealthScorePanel({ ticker }: HealthScorePanelProps) {
             <Skeleton className="h-4 w-24 bg-slate-800" />
           </div>
         </div>
-        {Array.from({ length: 7 }).map((_, i) => (
-          <Skeleton key={i} className="h-14 w-full bg-slate-800 rounded-lg" />
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full bg-slate-800 rounded-lg" />
         ))}
       </div>
     );
   }
 
-  if (error || !healthData) {
+  /* ─── Error / No data ────────────────────────────────────── */
+  if (error || resolvedScore === null || !resolvedBreakdown || resolvedBreakdown.length === 0) {
     return (
       <div
         className="rounded-xl border p-6 text-center"
@@ -157,159 +331,163 @@ export default function HealthScorePanel({ ticker }: HealthScorePanelProps) {
     );
   }
 
+  const rating = ratingFromScore(resolvedScore);
+  const ratingAr = ratingArFromScore(resolvedScore);
+
+  /* ─── Render ─────────────────────────────────────────────── */
   return (
-    <div className="space-y-4">
-      {/* ─── Overall Score ────────────────────────────────── */}
-      <div
-        className="rounded-xl border p-4"
-        style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
-      >
-        <div className="flex items-center gap-6">
-          <CircularGauge score={healthData.overallScore} rating={healthData.rating} />
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <Heart className={`w-5 h-5 ${ratingColors[healthData.rating]}`} />
-              <h3 className="text-sm font-semibold text-slate-300">
-                Financial Health
-              </h3>
-            </div>
-            <div className="flex items-center gap-2 mb-2">
-              <Badge
-                variant="outline"
-                className={`text-sm font-bold border ${ratingBgColors[healthData.rating]} ${ratingColors[healthData.rating]}`}
-              >
-                {healthData.rating}
-              </Badge>
-              <Badge
-                variant="outline"
-                className={`text-sm border ${ratingBgColors[healthData.rating]} ${ratingColors[healthData.rating]}`}
-                dir="rtl"
-              >
-                {healthData.ratingAr}
-              </Badge>
-            </div>
-            <p className="text-xs text-slate-500">
-              Composite score based on {healthData.factors.length} weighted factors
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Factor Breakdown ─────────────────────────────── */}
-      <div
-        className="rounded-xl border p-4"
-        style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
-      >
-        <h3 className="text-sm font-semibold text-slate-300 mb-3">
-          Factor Breakdown
-        </h3>
-        <div className="space-y-3 max-h-96 overflow-y-auto egx-scrollbar pr-1">
-          {healthData.factors.map((factor) => (
-            <div
-              key={factor.name}
-              className="rounded-lg p-3"
-              style={{ backgroundColor: '#0f172a' }}
-            >
-              <div className="flex items-start justify-between mb-1.5">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-200 truncate">
-                      {factor.name}
-                    </span>
-                    <span className="text-xs text-slate-500" dir="rtl">
-                      {factor.nameAr}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge
-                    variant="outline"
-                    className={`text-[10px] h-5 border ${ratingBgColors[factor.interpretation === 'Excellent' || factor.interpretation === 'Strong' || factor.interpretation === 'Comfortable' || factor.interpretation === 'Conservative' ? 'Excellent' : factor.interpretation === 'Good' || factor.interpretation === 'Healthy' || factor.interpretation === 'Adequate' || factor.interpretation === 'Positive' || factor.interpretation === 'Moderate' ? 'Good' : factor.interpretation === 'Fair' || factor.interpretation === 'Marginal' || factor.interpretation === 'Tight' || factor.interpretation === 'Thin' || factor.interpretation === 'Mildly Negative' ? 'Fair' : factor.interpretation === 'Poor' || factor.interpretation === 'Weak' || factor.interpretation === 'Low' || factor.interpretation === 'Elevated' ? 'Poor' : 'Distressed']}`}
-                  >
-                    {factor.interpretation}
-                  </Badge>
-                  <span className="text-[10px] text-slate-500">
-                    W: {(factor.weight * 100).toFixed(0)}%
-                  </span>
-                </div>
-              </div>
-              {/* Score bar */}
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2 rounded-full bg-slate-800 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ease-out ${scoreBarColors(factor.score)}`}
-                    style={{ width: `${Math.max(factor.score, 2)}%` }}
-                  />
-                </div>
-                <span className={`mono-num text-xs w-8 text-right ${factor.score >= 55 ? 'text-slate-200' : 'text-slate-400'}`}>
-                  {factor.score}
-                </span>
-              </div>
-              <div className="flex items-center justify-between mt-1">
-                <span className="mono-num text-[10px] text-slate-500">
-                  Value: {factor.value > 100 ? 'N/A' : factor.value.toFixed(2)}
-                </span>
-                <span className="text-[10px] text-slate-500" dir="rtl">
-                  {factor.interpretationAr}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ─── Methodology Disclosure ───────────────────────── */}
-      <Collapsible open={methodologyOpen} onOpenChange={setMethodologyOpen}>
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-4">
+        {/* ─── Overall Score ──────────────────────────────────── */}
         <div
-          className="rounded-xl border overflow-hidden"
+          className="rounded-xl border p-4"
           style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
         >
-          <CollapsibleTrigger className="w-full">
-            <div className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
-              <div className="flex items-center gap-2">
-                <Info className="w-4 h-4 text-cyan-400" />
-                <span className="text-sm font-medium text-slate-300">
-                  Methodology & Transparency
+          <div className="flex items-center gap-6">
+            <CircularGauge score={resolvedScore} />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Heart className={`w-5 h-5 ${ratingColors[rating]}`} />
+                <h3 className="text-sm font-semibold text-slate-300">
+                  Financial Health
+                </h3>
+              </div>
+              <div className="flex items-center gap-2 mb-2">
+                <Badge
+                  variant="outline"
+                  className={`text-sm font-bold border ${ratingBgColors[rating]} ${ratingColors[rating]}`}
+                >
+                  {rating}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={`text-sm border ${ratingBgColors[rating]} ${ratingColors[rating]}`}
+                  dir="rtl"
+                >
+                  {ratingAr}
+                </Badge>
+              </div>
+              <p className="text-xs text-slate-500">
+                Composite score across {resolvedBreakdown.length} weighted metrics
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Transparent Scorecard Breakdown ─────────────────── */}
+        <div
+          className="rounded-xl border p-4"
+          style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Info className="w-4 h-4 text-cyan-400" />
+            <h3 className="text-sm font-semibold text-slate-300">
+              Scorecard Breakdown
+            </h3>
+          </div>
+
+          <div className="space-y-3 max-h-[28rem] overflow-y-auto egx-scrollbar pr-1">
+            {resolvedBreakdown.map((item) => (
+              <MetricRow key={item.metric} item={item} />
+            ))}
+          </div>
+        </div>
+
+        {/* ─── Weight Allocation Summary ───────────────────────── */}
+        <div
+          className="rounded-xl border p-4"
+          style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
+        >
+          <h4 className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 text-cyan-400" />
+            Weight Allocation
+          </h4>
+          {/* Stacked bar */}
+          <div className="h-3 rounded-full bg-slate-800 overflow-hidden flex mb-2">
+            {resolvedBreakdown.map((item) => {
+              const pct = item.weight * 100;
+              const bColor =
+                pct >= 20
+                  ? 'bg-cyan-500'
+                  : pct >= 15
+                    ? 'bg-emerald-500'
+                    : 'bg-slate-500';
+              return (
+                <div
+                  key={item.metric}
+                  className={`h-full ${bColor} transition-all duration-500`}
+                  style={{ width: `${pct}%` }}
+                  title={`${item.label}: ${pct.toFixed(0)}%`}
+                />
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+            {resolvedBreakdown.map((item) => (
+              <div
+                key={item.metric}
+                className="flex items-center justify-between text-[10px]"
+              >
+                <span className="text-slate-500 truncate">{item.label}</span>
+                <span className="mono-num text-slate-300">
+                  {(item.weight * 100).toFixed(0)}%
                 </span>
               </div>
-              <ChevronDown
-                className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                  methodologyOpen ? 'rotate-180' : ''
-                }`}
-              />
-            </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="px-4 pb-4 space-y-3 border-t border-slate-700/50 pt-3">
-              <div>
-                <h4 className="text-xs font-semibold text-slate-400 mb-1">English</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  {healthData.methodology}
-                </p>
+            ))}
+          </div>
+        </div>
+
+        {/* ─── Methodology Disclosure (only when fetched via ticker) */}
+        {methodology && (
+          <div
+            className="rounded-xl border overflow-hidden"
+            style={{ backgroundColor: '#111827', borderColor: '#1e293b' }}
+          >
+            <button
+              type="button"
+              className="w-full"
+              onClick={() => setMethodologyOpen(!methodologyOpen)}
+            >
+              <div className="flex items-center justify-between p-4 hover:bg-slate-800/30 transition-colors">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-cyan-400" />
+                  <span className="text-sm font-medium text-slate-300">
+                    Methodology &amp; Transparency
+                  </span>
+                </div>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                    methodologyOpen ? 'rotate-180' : ''
+                  }`}
+                />
               </div>
-              <div>
-                <h4 className="text-xs font-semibold text-slate-400 mb-1">العربية</h4>
-                <p className="text-xs text-slate-400 leading-relaxed" dir="rtl">
-                  {healthData.methodologyAr}
-                </p>
-              </div>
-              <div className="rounded-lg p-3" style={{ backgroundColor: '#0f172a' }}>
-                <h4 className="text-xs font-semibold text-slate-400 mb-2">
-                  Weight Allocation
-                </h4>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {healthData.factors.map((f) => (
-                    <div key={f.name} className="flex items-center justify-between text-[10px]">
-                      <span className="text-slate-500 truncate">{f.name}</span>
-                      <span className="mono-num text-slate-300">{(f.weight * 100).toFixed(0)}%</span>
-                    </div>
-                  ))}
+            </button>
+            {methodologyOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t border-slate-700/50 pt-3">
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 mb-1">
+                    English
+                  </h4>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {methodology.en}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-400 mb-1">
+                    العربية
+                  </h4>
+                  <p
+                    className="text-xs text-slate-400 leading-relaxed"
+                    dir="rtl"
+                  >
+                    {methodology.ar}
+                  </p>
                 </div>
               </div>
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    </div>
+            )}
+          </div>
+        )}
+      </div>
+    </TooltipProvider>
   );
 }

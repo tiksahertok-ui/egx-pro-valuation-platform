@@ -5,11 +5,10 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  /* config options here */
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false, // NEVER suppress TypeScript errors
   },
-  reactStrictMode: false,
+  reactStrictMode: true, // Enable React strict mode for safety checks
   allowedDevOrigins: [
     ".space-z.ai",
   ],

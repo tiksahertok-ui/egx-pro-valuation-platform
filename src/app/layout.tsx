@@ -27,8 +27,9 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Default to Arabic (RTL) layout; client components can override based on locale
   return (
-    <html lang="ar" className="dark" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" className="dark" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         style={{ backgroundColor: '#0a0e17', color: '#e2e8f0' }}
