@@ -28,3 +28,26 @@ Stage Summary:
 - **Auto Fair Value**: When viewing a stock, runAllModels() is called automatically and results are prominently displayed with average/median fair value, upside/downside %, and overall verdict
 - **Key Files Modified**: supabase.ts (new), layout.tsx, page.tsx, 4 API routes, egx-data-service.ts, technical-computer.ts, .env
 - **Key Files Preserved**: egx-stocks-master.ts, valuation-engine.ts, market-hours.ts, all ui components
+
+---
+Task ID: 2
+Agent: main
+Task: Fix Supabase connection, verify deployment, push to GitHub
+
+Work Log:
+- Discovered that the Supabase service role JWT key was invalid ("Invalid API key")
+- Tested and confirmed the original sb_publishable key works: `sb_publishable_XaBRmFpzo2niyDpMN_UP_w_MnXxE6v3`
+- Updated .env to use the correct Supabase key
+- Verified all 21 stocks with real price data are accessible from Supabase
+- Fixed ThemeToggle component: replaced incorrect useState with useEffect
+- Fixed next.config.ts: removed serverExternalPackages for @prisma/client
+- Fixed lint error: setState-in-effect by using requestAnimationFrame
+- Verified production build passes successfully
+- Pushed all changes to GitHub (commit d03d7f3)
+
+Stage Summary:
+- **Critical Fix**: Supabase connection now works with correct API key (sb_publishable_ format)
+- **Real Data**: 21 stocks with real prices confirmed (COMI=132.5, TMGH=96.4, SWDY=88.9, etc.)
+- **Build Verified**: Production build compiles and generates all routes correctly
+- **GitHub Push**: Code pushed to main branch, Vercel should auto-deploy
+- **Vercel ENV Vars Needed**: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY (all set to sb_publishable_ key)
