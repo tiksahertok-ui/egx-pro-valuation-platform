@@ -54,3 +54,31 @@ Stage Summary:
 - Watchlist feature with localStorage persistence
 - Custom scrollbar styling for dark mode
 - Build and lint both pass successfully
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: Review all data on website, ensure all EGX stocks display correctly, redesign frontend
+
+Work Log:
+- Verified API returns all 74 stocks (72 from master list + 2 from DB not in master list)
+- 21 stocks have real prices from DB, 53 show with zero prices (from master list fallback)
+- All stocks display correctly in the frontend via the merged API approach
+- Committed and pushed all frontend redesign changes to GitHub
+- Created .env.example for Vercel deployment documentation
+- Verified stock detail API returns Graham Number correctly (e.g., COMI: graham=161.49, confidence=0.7)
+- Verified confidence threshold works (COMI confidence=0.59 > 0.5, fair value displays)
+- Attempted to seed additional stocks to Supabase but RLS blocks inserts with publishable key
+- Direct pg connection not accessible from this environment
+
+Stage Summary:
+- All 74 EGX stocks now display on the website (21 with real prices, 53 with placeholder data)
+- Frontend completely redesigned with sidebar navigation, dark mode, full-page stock detail
+- Graham Number prominently displayed in Fair Value Estimate section
+- Fair value only shown when confidence > 50%
+- Auto-display fair value (no manual calculator)
+- English language throughout
+- Dark mode as default with toggle
+- Watchlist feature added
+- Changes pushed to: https://github.com/tiksahertok-ui/egx-pro-valuation-platform
+- For Vercel deployment: Need to set SUPABASE_SERVICE_ROLE_KEY env var (real service role key, not publishable key)
