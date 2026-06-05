@@ -453,8 +453,8 @@ async function ensureStockExists(stock: EGXStockMaster): Promise<string> {
       nameAr: stock.nameAr,
       sector: stock.sector,
       industry: stock.industry,
-      isin: '',
-      yahooSymbol: stock.yahooSymbol,
+      exchange: 'EGX',
+      currency: 'EGP',
       description: stock.description,
       descriptionAr: stock.descriptionAr,
     })
@@ -1141,7 +1141,6 @@ export async function seedAllStocks(): Promise<SeedResult> {
               nameAr: stock.nameAr,
               sector: stock.sector,
               industry: stock.industry,
-              yahooSymbol: stock.yahooSymbol,
               description: stock.description,
               descriptionAr: stock.descriptionAr,
             })
@@ -1159,8 +1158,8 @@ export async function seedAllStocks(): Promise<SeedResult> {
             nameAr: stock.nameAr,
             sector: stock.sector,
             industry: stock.industry,
-            isin: '',
-            yahooSymbol: stock.yahooSymbol,
+            exchange: 'EGX',
+            currency: 'EGP',
             description: stock.description,
             descriptionAr: stock.descriptionAr,
           });

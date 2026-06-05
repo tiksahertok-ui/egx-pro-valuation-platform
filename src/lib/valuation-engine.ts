@@ -16,7 +16,7 @@ export interface StockFundamentals {
   bookValuePerShare: number;
   sharesOutstanding: number;
   marketCap: number;
-  dividendYield: number; // as percentage (e.g. 5.5)
+  dividendYield: number; // as decimal (e.g. 0.05 for 5%)
   peRatio: number;
   pbRatio: number;
   beta: number;
@@ -91,7 +91,7 @@ export const DEFAULT_SECTOR_AVERAGES: SectorAverages = {
   avgPB: 1.2,
   avgROE: 0.14,
   avgEVEbitda: 6.5,
-  avgDividendYield: 5.0,
+  avgDividendYield: 0.05, // as decimal (5%)
 };
 
 // ============================================================
@@ -121,7 +121,7 @@ function formatPercent(value: number): string {
 // ============================================================
 
 function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
-  const fcf = fundamentals.freeCashflow || (fundamentals.operatingCashflow * 0.7);
+  const fcf = fundamentals.freeCashflow || (fundamentals.operatingCashflow * 0.7) || 0;
   const wacc = calculateWACC(fundamentals, params);
   const growthRate = Math.min(fundamentals.revenueGrowth || params.gdpGrowthRate, 0.15);
   const terminalGrowth = Math.min(params.gdpGrowthRate * 0.5, 0.03);
@@ -141,7 +141,8 @@ function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
 
   const enterpriseValue = pvFCF + pvTerminalValue;
   const equityValue = enterpriseValue - fundamentals.totalDebt + (fundamentals.totalAssets - fundamentals.totalEquity - fundamentals.totalDebt); // add cash approx
-  const fairValuePerShare = safeDivide(equityValue, fundamentals.sharesOutstanding);
+  const shares = fundamentals.sharesOutstanding || (fundamentals.price > 0 ? fundamentals.marketCap / fundamentals.price : 1);
+  const fairValuePerShare = safeDivide(equityValue, shares);
 
   const upside = safeDivide(fairValuePerShare - fundamentals.price, fundamentals.price);
 
@@ -168,7 +169,7 @@ function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
 // ============================================================
 
 function ddmValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
-  const dividendYield = (fundamentals.dividendYield || sectorAvg.avgDividendYield) / 100;
+  const dividendYield = fundamentals.dividendYield || sectorAvg.avgDividendYield; // already as decimal
   const dps = fundamentals.price * dividendYield;
   const costOfEquity = params.riskFreeRate + (fundamentals.beta || 1.0) * params.equityRiskPremium;
   const growthRate = Math.min(fundamentals.earningsGrowth || params.gdpGrowthRate, 0.12);
@@ -315,7 +316,7 @@ function residualIncomeValuation(fundamentals: StockFundamentals, sectorAvg: Sec
       const eps = currentBVPS * decliningROE;
       const residualIncome = eps - currentBVPS * costOfEquity;
       pvResidualIncome += residualIncome / Math.pow(1 + costOfEquity, year);
-      currentBVPS = currentBVPS + eps - (fundamentals.dividendYield / 100 * fundamentals.price);
+      currentBVPS = currentBVPS + eps - (fundamentals.dividendYield * fundamentals.price);
       // ROE fades toward cost of equity
       decliningROE = decliningROE + (costOfEquity - decliningROE) * 0.2;
     }
@@ -363,7 +364,8 @@ function evEbitdaValuation(fundamentals: StockFundamentals, sectorAvg: SectorAve
   const targetMultiple = sectorAvg.avgEVEbitda || DEFAULT_SECTOR_AVERAGES.avgEVEbitda;
   const impliedEV = ebitda * targetMultiple;
   const impliedEquity = impliedEV - fundamentals.totalDebt + (fundamentals.totalAssets - fundamentals.totalEquity - fundamentals.totalDebt);
-  const fairValue = safeDivide(impliedEquity, fundamentals.sharesOutstanding);
+  const shares = fundamentals.sharesOutstanding || (fundamentals.price > 0 ? fundamentals.marketCap / fundamentals.price : 1);
+  const fairValue = safeDivide(impliedEquity, shares);
 
   const upside = safeDivide(fairValue - fundamentals.price, fundamentals.price);
 
@@ -392,7 +394,8 @@ function assetBasedValuation(fundamentals: StockFundamentals, sectorAvg: SectorA
   // Net Asset Value = (Total Assets - Total Liabilities) / Shares Outstanding
   const totalLiabilities = fundamentals.totalAssets - fundamentals.totalEquity;
   const nav = fundamentals.totalEquity;
-  const navPerShare = safeDivide(nav, fundamentals.sharesOutstanding);
+  const navShares = fundamentals.sharesOutstanding || (fundamentals.price > 0 ? fundamentals.marketCap / fundamentals.price : 1);
+  const navPerShare = safeDivide(nav, navShares);
 
   // Apply discount/premium based on ROE vs cost of equity
   const costOfEquity = params.riskFreeRate + (fundamentals.beta || 1.0) * params.equityRiskPremium;
@@ -440,7 +443,8 @@ function earningsPowerValuation(fundamentals: StockFundamentals, sectorAvg: Sect
   const distributableEarnings = normalizedEarnings * 0.85; // conservative
 
   const epv = safeDivide(distributableEarnings, wacc);
-  const fairValue = safeDivide(epv, fundamentals.sharesOutstanding);
+  const epvShares = fundamentals.sharesOutstanding || (fundamentals.price > 0 ? fundamentals.marketCap / fundamentals.price : 1);
+  const fairValue = safeDivide(epv, epvShares);
 
   const upside = safeDivide(fairValue - fundamentals.price, fundamentals.price);
 
@@ -547,6 +551,6 @@ export function quickValuation(fundamentals: Partial<StockFundamentals>): {
   return {
     fairValue: Math.round(fairValue * 100) / 100,
     upside: Math.round(upside * 100) / 100,
-    verdict: upside > 15 ? 'شراء' : upside < -15 ? 'بيع' : 'احتفاظ',
+    verdict: upside > 15 ? 'Buy' : upside < -15 ? 'Sell' : 'Hold',
   };
 }

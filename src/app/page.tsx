@@ -85,6 +85,11 @@ interface StockDetail {
       profitMargin: number;
       eps: number;
       bookValuePerShare: number;
+      operatingCashflow?: number;
+      freeCashflow?: number;
+      revenueGrowth?: number;
+      earningsGrowth?: number;
+      evToEbitda?: number;
     }>;
     priceHistory: Array<{
       date: string;
@@ -96,13 +101,17 @@ interface StockDetail {
     }>;
     technicalIndicators: Array<{
       date: string;
-      rsi14: number;
-      macdLine: number;
-      macdSignal: number;
-      macdHist: number;
-      bbUpper: number;
-      bbMiddle: number;
-      bbLower: number;
+      rsi14?: number;
+      macdLine?: number;
+      macdSignal?: number;
+      macdHist?: number;
+      macdHistogram?: number;
+      bbUpper?: number;
+      bbMiddle?: number;
+      bbLower?: number;
+      sma20?: number;
+      sma50?: number;
+      sma200?: number;
     }>;
   };
   valuation: {
@@ -144,21 +153,35 @@ const SECTOR_ICONS: Record<string, string> = {
   'Financial Services': '💰',
   'Telecommunications': '📡',
   'Food & Beverages': '🍽️',
+  'Food': '🍽️',
   'Construction & Engineering': '⚙️',
+  'Construction': '⚙️',
+  'Construction Materials': '🧱',
   'Energy': '⚡',
   'Chemicals & Fertilizers': '🧪',
+  'Chemicals': '🧪',
+  'Electrical Equipment': '🔌',
   'Tobacco': '🚬',
   'Technology': '💻',
   'Tourism': '✈️',
   'Healthcare & Pharma': '🏥',
+  'Healthcare': '🏥',
   'Textiles & Retail': '👔',
+  'Textiles': '👔',
   'Mining & Materials': '⛏️',
+  'Mining': '⛏️',
   'Insurance': '🛡️',
   'Other & Investment': '📦',
   'Transport & Logistics': '🚛',
+  'Transport': '🚛',
   'Media & Entertainment': '🎬',
   'Automotive': '🚗',
   'Paper & Packaging': '📄',
+  'Industrial': '🏭',
+  'Utilities': '💡',
+  'Communication Services': '📞',
+  'Consumer Discretionary': '🛍️',
+  'Consumer Staples': '🛒',
 };
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
@@ -727,7 +750,7 @@ export default function EGXProPlatform() {
               <select
                 value={selectedSector}
                 onChange={(e) => setSelectedSector(e.target.value)}
-                className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
+                className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100"
               >
                 <option value="all">All Sectors</option>
                 {uniqueSectors.map(sector => (
@@ -893,7 +916,7 @@ export default function EGXProPlatform() {
 
       {/* Stock Detail Dialog */}
       <Dialog open={!!selectedTicker} onOpenChange={(open) => !open && setSelectedTicker(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900">
           {detailLoading ? (
             <div className="space-y-4 py-4">
               <Skeleton className="h-8 w-48" />
@@ -944,6 +967,15 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
   const latestFinancial = stock.financialData?.[0];
   const latestTech = stock.technicalIndicators?.[0];
 
+  // Helper for safe toFixed on potentially undefined/null values
+  const safeToFixed = (val: number | undefined | null, digits: number = 2): string => {
+    if (val == null || !isFinite(val)) return '—';
+    return val.toFixed(digits);
+  };
+
+  // Get MACD histogram from either field name
+  const macdHistValue = latestTech?.macdHist ?? latestTech?.macdHistogram;
+
   return (
     <div className="space-y-6">
       <DialogHeader>
@@ -975,14 +1007,14 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
           <CardContent className="p-3">
             <p className="text-xs text-slate-500">P/E Ratio</p>
             <p className="text-xl font-bold">{stock.peRatio > 0 ? stock.peRatio.toFixed(1) : '—'}</p>
-            <p className="text-[10px] text-slate-400">Sector: {sectorAvg?.avgPE?.toFixed(1) || '—'}</p>
+            <p className="text-[10px] text-slate-400">Sector: {safeToFixed(sectorAvg?.avgPE, 1)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3">
             <p className="text-xs text-slate-500">P/B Ratio</p>
             <p className="text-xl font-bold">{stock.pbRatio > 0 ? stock.pbRatio.toFixed(2) : '—'}</p>
-            <p className="text-[10px] text-slate-400">Sector: {sectorAvg?.avgPB?.toFixed(2) || '—'}</p>
+            <p className="text-[10px] text-slate-400">Sector: {safeToFixed(sectorAvg?.avgPB, 2)}</p>
           </CardContent>
         </Card>
         <Card>
@@ -1015,7 +1047,7 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
               <div>
                 <p className="text-xs text-slate-500">Upside / Downside</p>
                 <p className={`text-2xl font-bold ${getVerdictColor(valuation.overallVerdict)}`}>
-                  {valuation.averageUpside > 0 ? '+' : ''}{valuation.averageUpside.toFixed(1)}%
+                  {valuation.averageUpside > 0 ? '+' : ''}{safeToFixed(valuation.averageUpside, 1)}%
                 </p>
               </div>
               <div>
@@ -1023,7 +1055,7 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
                 <Badge className={`text-sm px-3 py-1 ${getVerdictBg(valuation.overallVerdict)}`}>
                   {getOverallVerdictLabel(valuation.overallVerdict)}
                 </Badge>
-                <p className="text-[10px] text-slate-400 mt-1">Confidence: {(valuation.confidenceScore * 100).toFixed(0)}%</p>
+                <p className="text-[10px] text-slate-400 mt-1">Confidence: {safeToFixed(valuation.confidenceScore * 100, 0)}%</p>
               </div>
             </div>
 
@@ -1047,7 +1079,7 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
                       <TableCell className={getVerdictColor(m.verdict)}>
                         <span className="flex items-center gap-1">
                           {m.upsideDownside > 0 ? <ArrowUpRight className="w-3 h-3" /> : m.upsideDownside < 0 ? <ArrowDownRight className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
-                          {m.upsideDownside > 0 ? '+' : ''}{m.upsideDownside.toFixed(1)}%
+                          {m.upsideDownside > 0 ? '+' : ''}{safeToFixed(m.upsideDownside, 1)}%
                         </span>
                       </TableCell>
                       <TableCell>
@@ -1063,7 +1095,7 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
                               style={{ width: `${m.confidence * 100}%` }}
                             />
                           </div>
-                          <span className="text-xs text-slate-500">{(m.confidence * 100).toFixed(0)}%</span>
+                          <span className="text-xs text-slate-500">{safeToFixed(m.confidence * 100, 0)}%</span>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1112,22 +1144,22 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
             <div className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-500">EPS</span>
-                <span className="font-bold">{stock.eps > 0 ? stock.eps.toFixed(2) : '—'}</span>
+                <span className="font-bold">{stock.eps > 0 ? safeToFixed(stock.eps, 2) : '—'}</span>
               </div>
               <Separator />
               <div className="flex justify-between">
                 <span className="text-slate-500">Book Value/Share</span>
-                <span className="font-bold">{stock.bookValuePerShare > 0 ? stock.bookValuePerShare.toFixed(2) : '—'}</span>
+                <span className="font-bold">{stock.bookValuePerShare > 0 ? safeToFixed(stock.bookValuePerShare, 2) : '—'}</span>
               </div>
               <Separator />
               <div className="flex justify-between">
                 <span className="text-slate-500">Dividend Yield</span>
-                <span className="font-bold">{stock.dividendYield > 0 ? stock.dividendYield.toFixed(1) + '%' : '—'}</span>
+                <span className="font-bold">{stock.dividendYield > 0 ? safeToFixed(stock.dividendYield, 1) + '%' : '—'}</span>
               </div>
               <Separator />
               <div className="flex justify-between">
                 <span className="text-slate-500">Beta</span>
-                <span className="font-bold">{stock.beta > 0 ? stock.beta.toFixed(2) : '—'}</span>
+                <span className="font-bold">{stock.beta > 0 ? safeToFixed(stock.beta, 2) : '—'}</span>
               </div>
               <Separator />
               <div className="flex justify-between">
@@ -1166,37 +1198,37 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="text-slate-500">RSI (14)</span>
-                  <span className={`font-bold ${latestTech.rsi14 > 70 ? 'text-red-600' : latestTech.rsi14 < 30 ? 'text-emerald-600' : ''}`}>
-                    {latestTech.rsi14.toFixed(1)}
-                    {latestTech.rsi14 > 70 ? ' (Overbought)' : latestTech.rsi14 < 30 ? ' (Oversold)' : ''}
+                  <span className={`font-bold ${(latestTech.rsi14 ?? 0) > 70 ? 'text-red-600' : (latestTech.rsi14 ?? 0) < 30 ? 'text-emerald-600' : ''}`}>
+                    {safeToFixed(latestTech.rsi14, 1)}
+                    {(latestTech.rsi14 ?? 0) > 70 ? ' (Overbought)' : (latestTech.rsi14 ?? 0) < 30 ? ' (Oversold)' : ''}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-slate-500">MACD Line</span>
-                  <span className="font-bold">{latestTech.macdLine.toFixed(2)}</span>
+                  <span className="font-bold">{safeToFixed(latestTech.macdLine, 2)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-slate-500">MACD Signal</span>
-                  <span className="font-bold">{latestTech.macdSignal.toFixed(2)}</span>
+                  <span className="font-bold">{safeToFixed(latestTech.macdSignal, 2)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-slate-500">MACD Histogram</span>
-                  <span className={`font-bold ${latestTech.macdHist > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                    {latestTech.macdHist.toFixed(2)}
+                  <span className={`font-bold ${(macdHistValue ?? 0) > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {safeToFixed(macdHistValue, 2)}
                   </span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-slate-500">Bollinger Upper</span>
-                  <span className="font-bold">{latestTech.bbUpper.toFixed(2)}</span>
+                  <span className="font-bold">{safeToFixed(latestTech.bbUpper, 2)}</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-slate-500">Bollinger Lower</span>
-                  <span className="font-bold">{latestTech.bbLower.toFixed(2)}</span>
+                  <span className="font-bold">{safeToFixed(latestTech.bbLower, 2)}</span>
                 </div>
               </div>
             ) : (
@@ -1243,15 +1275,15 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
               </div>
               <div>
                 <p className="text-xs text-slate-500">ROE</p>
-                <p className="font-bold">{latestFinancial.roe > 0 ? (latestFinancial.roe * 100).toFixed(1) + '%' : '—'}</p>
+                <p className="font-bold">{latestFinancial.roe > 0 ? safeToFixed(latestFinancial.roe * 100, 1) + '%' : '—'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500">Gross Margin</p>
-                <p className="font-bold">{latestFinancial.grossMargin > 0 ? (latestFinancial.grossMargin * 100).toFixed(1) + '%' : '—'}</p>
+                <p className="font-bold">{latestFinancial.grossMargin > 0 ? safeToFixed(latestFinancial.grossMargin * 100, 1) + '%' : '—'}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500">Profit Margin</p>
-                <p className="font-bold">{latestFinancial.profitMargin > 0 ? (latestFinancial.profitMargin * 100).toFixed(1) + '%' : '—'}</p>
+                <p className="font-bold">{latestFinancial.profitMargin > 0 ? safeToFixed(latestFinancial.profitMargin * 100, 1) + '%' : '—'}</p>
               </div>
             </div>
           </CardContent>

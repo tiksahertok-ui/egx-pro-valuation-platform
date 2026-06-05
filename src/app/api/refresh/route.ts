@@ -6,67 +6,87 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    // Step 1: Seed stocks to Supabase
+    // Step 1: Seed ALL stocks to Supabase using upsert for efficiency
     let created = 0;
     let updated = 0;
     let skipped = 0;
 
-    for (const stock of EGX_STOCKS) {
+    // Build upsert payload for all stocks
+    const upsertPayload = EGX_STOCKS.map(stock => ({
+      ticker: stock.ticker,
+      name: stock.name,
+      nameAr: stock.nameAr,
+      sector: stock.sector,
+      industry: stock.industry,
+      exchange: 'EGX',
+      currency: 'EGP',
+      description: stock.description,
+      descriptionAr: stock.descriptionAr,
+    }));
+
+    // Upsert all stocks in batches of 50
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < upsertPayload.length; i += BATCH_SIZE) {
+      const batch = upsertPayload.slice(i, i + BATCH_SIZE);
       try {
-        // Check if stock exists
-        const { data: existing } = await supabase
+        const { error } = await supabase
           .from('Stock')
-          .select('id, ticker')
-          .eq('ticker', stock.ticker)
-          .single();
+          .upsert(batch, { onConflict: 'ticker', ignoreDuplicates: false });
 
-        if (!existing) {
-          const { error } = await supabase
-            .from('Stock')
-            .insert({
-              ticker: stock.ticker,
-              name: stock.name,
-              nameAr: stock.nameAr,
-              sector: stock.sector,
-              industry: stock.industry,
-              isin: '',
-              yahooSymbol: stock.yahooSymbol,
-              description: stock.description,
-              descriptionAr: stock.descriptionAr,
-            });
-
-          if (!error) {
-            created++;
-          } else {
-            console.warn(`Failed to create ${stock.ticker}:`, error.message);
-            skipped++;
-          }
+        if (error) {
+          console.warn(`Batch upsert failed at offset ${i}:`, error.message);
+          skipped += batch.length;
         } else {
-          skipped++;
+          // Count as processed (can't easily distinguish created vs updated with upsert)
+          created += batch.length;
         }
       } catch {
-        skipped++;
+        skipped += batch.length;
       }
     }
 
-    // Step 2: Try to refresh some prices from Yahoo Finance (top 20 by liquidity)
+    // Step 2: Try to refresh prices from Yahoo Finance (top 50 by liquidity)
     let pricesRefreshed = 0;
     let pricesFailed = 0;
-    const topTickers = ['COMI', 'ORAS', 'SWDY', 'HRHO', 'ETEL', 'EAST', 'JUFO', 'PHDC', 'TMGH', 'CCAP',
-                        'FWRY', 'AMOC', 'SPMD', 'ABUK', 'EKRI', 'BNQA', 'CIRA', 'OCDI', 'ORHD', 'MHMD'];
+    const topTickers = [
+      // Banking
+      'COMI', 'BNQA', 'ADIB', 'BTFH', 'SAUD', 'MISR', 'NBEA', 'CIEB', 'FAIT',
+      // Real Estate
+      'TMGH', 'PHDC', 'MHMD', 'OCDI', 'ORHD', 'HDBR', 'MNHD',
+      // Financial Services
+      'HRHO', 'CIRA', 'BINV', 'ECAP',
+      // Telecom
+      'ETEL', 'VODE', 'OTMT',
+      // Food & Beverages
+      'JUFO', 'EKRI', 'DOMT',
+      // Construction & Engineering
+      'ORAS', 'SWDY', 'SKPC', 'ALUM', 'ESRS',
+      // Energy
+      'CCAP', 'AMOC',
+      // Chemicals & Fertilizers
+      'ABUK', 'SPMD',
+      // Tobacco
+      'EAST',
+      // Technology
+      'FWRY', 'EFLS', 'RAYA',
+      // Other liquid stocks
+      'CSEL', 'OTEL', 'HOCA', 'MRSE', 'BDCO', 'HALW', 'APPC', 'DAPH',
+    ];
 
     for (const ticker of topTickers) {
       try {
-        // Get stock from Supabase to find yahooSymbol
+        // Construct yahooSymbol from ticker + '.CA' suffix
+        const yahooSymbol = `${ticker}.CA`;
+
         const { data: stockData } = await supabase
           .from('Stock')
-          .select('id, yahooSymbol, fiftyTwoWeekHigh, fiftyTwoWeekLow')
+          .select('id, fiftyTwoWeekHigh, fiftyTwoWeekLow')
           .eq('ticker', ticker)
           .single();
 
-        if (!stockData?.yahooSymbol) continue;
+        if (!stockData?.id) continue;
 
-        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockData.yahooSymbol)}?range=1d&interval=1d`;
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?range=1d&interval=1d`;
         const response = await fetch(yahooUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
