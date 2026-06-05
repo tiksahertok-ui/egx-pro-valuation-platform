@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,55 +7,69 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model Stock {
-  id               String   @id @default(cuid())
-  ticker           String   @unique
-  name             String
-  nameAr           String
-  sector           String
-  industry         String
-  isin             String   @default("")
-  yahooSymbol      String   @default("")
-  marketCap        Float    @default(0)
-  price            Float    @default(0)
-  sharesOutstanding Float   @default(0)
-  beta             Float    @default(1.0)
-  egx30Beta        Float    @default(1.0)
-  dividendYield    Float    @default(0)
-  peRatio          Float    @default(0)
-  pbRatio          Float    @default(0)
-  eps              Float    @default(0)
-  bookValuePerShare Float   @default(0)
-  fiftyTwoWeekHigh Float    @default(0)
-  fiftyTwoWeekLow  Float    @default(0)
-  avgVolume        Float    @default(0)
-  description      String   @default("")
-  descriptionAr    String   @default("")
-  lastPriceAt      DateTime?
-  lastFinancialsAt DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  ticker            String   @unique
+  name              String
+  nameAr            String
+  sector            String
+  industry          String
+  isin              String   @default("")
+  yahooSymbol       String   @default("")
+  marketCap         Float    @default(0)
+  price             Float    @default(0)
+  sharesOutstanding Float    @default(0)
+  beta              Float    @default(1.0)
+  egx30Beta         Float    @default(1.0)
+  dividendYield     Float    @default(0)
+  peRatio           Float    @default(0)
+  pbRatio           Float    @default(0)
+  eps               Float    @default(0)
+  bookValuePerShare Float    @default(0)
+  fiftyTwoWeekHigh  Float    @default(0)
+  fiftyTwoWeekLow   Float    @default(0)
+  avgVolume         Float    @default(0)
+  description       String   @default("")
+  descriptionAr     String   @default("")
+  lastPriceAt       DateTime?
+  lastFinancialsAt  DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  priceHistory      PriceHistory[]
+  priceHistory        PriceHistory[]
   technicalIndicators TechnicalIndicator[]
+  financialData       FinancialData[]
+  valuationResults    ValuationResult[]
+}
+
+model FinancialData {
+  id                 String   @id @default(cuid())
+  stockId            String
+  year               Int
+  revenue            Float    @default(0)
+  netIncome          Float    @default(0)
+  totalAssets        Float    @default(0)
+  totalEquity        Float    @default(0)
+  totalDebt          Float    @default(0)
+  operatingCashflow  Float    @default(0)
+  freeCashflow       Float    @default(0)
+  grossMargin        Float    @default(0)
+  operatingMargin    Float    @default(0)
+  profitMargin       Float    @default(0)
+  roe                Float    @default(0)
+  roa                Float    @default(0)
+  debtToEquity       Float    @default(0)
+  evToEbitda         Float    @default(0)
+  dividendPerShare   Float    @default(0)
+  eps                Float    @default(0)
+  bookValuePerShare  Float    @default(0)
+  revenueGrowth      Float    @default(0)
+  earningsGrowth     Float    @default(0)
+  createdAt          DateTime @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([stockId, year])
 }
 
 model PriceHistory {
@@ -73,7 +84,7 @@ model PriceHistory {
   adjClose  Float    @default(0)
   createdAt DateTime @default(now())
 
-  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
   @@unique([stockId, date])
 }
@@ -103,36 +114,73 @@ model TechnicalIndicator {
   obv           Float    @default(0)
   createdAt     DateTime @default(now())
 
-  stock         Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
   @@unique([stockId, date])
 }
 
+model ValuationResult {
+  id               String   @id @default(cuid())
+  stockId          String
+  model            String
+  fairValue        Float    @default(0)
+  upsideDownside   Float    @default(0)
+  confidence       Float    @default(0)
+  assumptions      String   @default("{}")
+  calculatedAt     DateTime @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([stockId, model])
+}
+
 model SectorStats {
-  id              String   @id @default(cuid())
-  sector          String   @unique
-  sectorAr        String   @default("")
-  avgPE           Float    @default(0)
-  avgPB           Float    @default(0)
-  avgROE          Float    @default(0)
-  avgROA          Float    @default(0)
-  avgDebtEquity   Float    @default(0)
-  avgEVEbitda     Float    @default(0)
-  avgDividendYield Float   @default(0)
-  totalMarketCap  Float    @default(0)
-  stockCount      Int      @default(0)
-  weightedPE      Float    @default(0)
-  weightedPB      Float    @default(0)
-  updatedAt       DateTime @updatedAt
-  createdAt       DateTime @default(now())
+  id               String   @id @default(cuid())
+  sector           String   @unique
+  sectorAr         String   @default("")
+  avgPE            Float    @default(0)
+  avgPB            Float    @default(0)
+  avgROE           Float    @default(0)
+  avgROA           Float    @default(0)
+  avgDebtEquity    Float    @default(0)
+  avgEVEbitda      Float    @default(0)
+  avgDividendYield Float    @default(0)
+  totalMarketCap   Float    @default(0)
+  stockCount       Int      @default(0)
+  weightedPE       Float    @default(0)
+  weightedPB       Float    @default(0)
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+}
+
+model EconomicIndicator {
+  id          String @id @default(cuid())
+  name        String @unique
+  nameAr      String @default("")
+  value       Float  @default(0)
+  previous    Float  @default(0)
+  change      Float  @default(0)
+  unit        String @default("")
+  source      String @default("")
+  updatedAt   DateTime @updatedAt
+}
+
+model MarketParams {
+  id                    String @id @default("default")
+  riskFreeRate          Float  @default(0.18)
+  equityRiskPremium     Float  @default(0.08)
+  egx30PE               Float  @default(0)
+  inflationRate         Float  @default(0.30)
+  gdpGrowthRate         Float  @default(0.05)
+  updatedAt             DateTime @updatedAt
 }
 
 model DataRefreshLog {
-  id          String   @id @default(cuid())
-  scope       String   // 'prices' | 'financials' | 'all' | 'technical'
-  stocksUpdated Int    @default(0)
-  stocksFailed  Int    @default(0)
-  errors      String   @default("[]")
-  startedAt   DateTime @default(now())
-  completedAt DateTime?
+  id            String    @id @default(cuid())
+  scope         String
+  stocksUpdated Int       @default(0)
+  stocksFailed  Int       @default(0)
+  errors        String    @default("[]")
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
 }
