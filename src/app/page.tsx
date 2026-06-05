@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BarChart3, TrendingUp, TrendingDown, Search, RefreshCw,
   ChevronDown, ChevronUp, ArrowUpRight, ArrowDownRight, Minus,
-  LayoutDashboard, List, PieChart, Calculator, Loader2,
-  Building2, Eye, X, CheckCircle, AlertCircle, Info
+  LayoutDashboard, List, PieChart, Loader2,
+  Building2, Eye, X, Info, Sun, Moon, DollarSign,
+  Activity, Shield, Target, Calculator, ArrowRight
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
@@ -23,10 +24,10 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 
 // ============================================================
@@ -60,7 +61,6 @@ interface StockData {
 interface ValuationModelResult {
   model: string;
   modelName: string;
-  modelNameAr: string;
   fairValue: number;
   upsideDownside: number;
   confidence: number;
@@ -138,27 +138,27 @@ interface SectorData {
 // Constants
 // ============================================================
 
-const SECTOR_NAMES_AR: Record<string, string> = {
-  'Banking': 'البنوك',
-  'Real Estate': 'العقارات',
-  'Financial Services': 'الخدمات المالية',
-  'Telecommunications': 'الاتصالات',
-  'Food & Beverages': 'الأغذية والمشروبات',
-  'Construction & Engineering': 'التشييد والهندسة',
-  'Energy': 'الطاقة',
-  'Chemicals & Fertilizers': 'الكيمياويات والأسمدة',
-  'Tobacco': 'التبغ',
-  'Technology': 'التكنولوجيا',
-  'Tourism': 'السياحة',
-  'Healthcare & Pharma': 'الرعاية الصحية',
-  'Textiles & Retail': 'المنسوجات والتجزئة',
-  'Mining & Materials': 'التعدين والمواد',
-  'Insurance': 'التأمين',
-  'Other & Investment': 'أخرى واستثمار',
-  'Transport & Logistics': 'النقل واللوجستيات',
-  'Media & Entertainment': 'الإعلام والترفيه',
-  'Automotive': 'السيارات',
-  'Paper & Packaging': 'الورق والتغليف',
+const SECTOR_ICONS: Record<string, string> = {
+  'Banking': '🏦',
+  'Real Estate': '🏗️',
+  'Financial Services': '💰',
+  'Telecommunications': '📡',
+  'Food & Beverages': '🍽️',
+  'Construction & Engineering': '⚙️',
+  'Energy': '⚡',
+  'Chemicals & Fertilizers': '🧪',
+  'Tobacco': '🚬',
+  'Technology': '💻',
+  'Tourism': '✈️',
+  'Healthcare & Pharma': '🏥',
+  'Textiles & Retail': '👔',
+  'Mining & Materials': '⛏️',
+  'Insurance': '🛡️',
+  'Other & Investment': '📦',
+  'Transport & Logistics': '🚛',
+  'Media & Entertainment': '🎬',
+  'Automotive': '🚗',
+  'Paper & Packaging': '📄',
 };
 
 const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
@@ -169,24 +169,42 @@ const CHART_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#e
 
 function formatNumber(num: number): string {
   if (!num && num !== 0) return '-';
-  if (num >= 1e12) return (num / 1e12).toFixed(1) + ' ت';
-  if (num >= 1e9) return (num / 1e9).toFixed(1) + ' ب';
-  if (num >= 1e6) return (num / 1e6).toFixed(1) + ' م';
-  if (num >= 1e3) return (num / 1e3).toFixed(1) + ' ك';
+  if (num >= 1e12) return (num / 1e12).toFixed(1) + 'T';
+  if (num >= 1e9) return (num / 1e9).toFixed(1) + 'B';
+  if (num >= 1e6) return (num / 1e6).toFixed(1) + 'M';
+  if (num >= 1e3) return (num / 1e3).toFixed(1) + 'K';
   return num.toFixed(2);
 }
 
 function formatPrice(num: number): string {
   if (!num) return '-';
-  return num.toFixed(2) + ' ج.م';
+  return 'EGP ' + num.toFixed(2);
 }
 
 function formatMarketCap(num: number): string {
   if (!num) return '-';
-  if (num >= 1e12) return (num / 1e12).toFixed(1) + ' تريليون';
-  if (num >= 1e9) return (num / 1e9).toFixed(1) + ' مليار';
-  if (num >= 1e6) return (num / 1e6).toFixed(1) + ' مليون';
+  if (num >= 1e12) return (num / 1e12).toFixed(1) + ' Trillion';
+  if (num >= 1e9) return (num / 1e9).toFixed(1) + ' Billion';
+  if (num >= 1e6) return (num / 1e6).toFixed(1) + ' Million';
   return num.toLocaleString();
+}
+
+function getVerdictLabel(verdict: string): string {
+  switch (verdict) {
+    case 'undervalued':
+    case 'strong_buy':
+    case 'buy':
+      return 'Undervalued';
+    case 'overvalued':
+    case 'strong_sell':
+    case 'sell':
+      return 'Overvalued';
+    case 'fair':
+    case 'hold':
+      return 'Fair Value';
+    default:
+      return verdict;
+  }
 }
 
 function getVerdictColor(verdict: string): string {
@@ -194,13 +212,13 @@ function getVerdictColor(verdict: string): string {
     case 'undervalued':
     case 'strong_buy':
     case 'buy':
-      return 'text-emerald-600';
+      return 'text-emerald-600 dark:text-emerald-400';
     case 'overvalued':
     case 'strong_sell':
     case 'sell':
-      return 'text-red-600';
+      return 'text-red-600 dark:text-red-400';
     default:
-      return 'text-amber-600';
+      return 'text-amber-600 dark:text-amber-400';
   }
 }
 
@@ -219,27 +237,13 @@ function getVerdictBg(verdict: string): string {
   }
 }
 
-function getVerdictAr(verdict: string): string {
+function getOverallVerdictLabel(verdict: string): string {
   switch (verdict) {
-    case 'undervalued': return 'مقيمة بأقل';
-    case 'overvalued': return 'مقيمة بأعلى';
-    case 'fair': return 'عادلة';
-    case 'strong_buy': return 'شراء قوي';
-    case 'buy': return 'شراء';
-    case 'hold': return 'احتفاظ';
-    case 'sell': return 'بيع';
-    case 'strong_sell': return 'بيع قوي';
-    default: return verdict;
-  }
-}
-
-function getOverallVerdictAr(verdict: string): string {
-  switch (verdict) {
-    case 'strong_buy': return 'شراء قوي';
-    case 'buy': return 'شراء';
-    case 'hold': return 'احتفاظ';
-    case 'sell': return 'بيع';
-    case 'strong_sell': return 'بيع قوي';
+    case 'strong_buy': return 'Strong Buy';
+    case 'buy': return 'Buy';
+    case 'hold': return 'Hold';
+    case 'sell': return 'Sell';
+    case 'strong_sell': return 'Strong Sell';
     default: return '—';
   }
 }
@@ -253,7 +257,7 @@ function useStocks() {
     queryKey: ['stocks'],
     queryFn: async () => {
       const res = await fetch('/api/stocks');
-      if (!res.ok) throw new Error('فشل تحميل الأسهم');
+      if (!res.ok) throw new Error('Failed to load stocks');
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
@@ -266,7 +270,7 @@ function useStockDetail(ticker: string | null) {
     queryFn: async () => {
       if (!ticker) return null;
       const res = await fetch(`/api/stocks/${ticker}`);
-      if (!res.ok) throw new Error('فشل تحميل بيانات السهم');
+      if (!res.ok) throw new Error('Failed to load stock data');
       return res.json();
     },
     enabled: !!ticker,
@@ -279,7 +283,7 @@ function useSectors() {
     queryKey: ['sectors'],
     queryFn: async () => {
       const res = await fetch('/api/sectors');
-      if (!res.ok) throw new Error('فشل تحميل القطاعات');
+      if (!res.ok) throw new Error('Failed to load sectors');
       return res.json();
     },
     staleTime: 10 * 60 * 1000,
@@ -291,18 +295,46 @@ function useRefreshData() {
   return useMutation({
     mutationFn: async () => {
       const res = await fetch('/api/refresh', { method: 'POST' });
-      if (!res.ok) throw new Error('فشل تحديث البيانات');
+      if (!res.ok) throw new Error('Failed to refresh data');
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['stocks'] });
       queryClient.invalidateQueries({ queryKey: ['sectors'] });
-      toast.success(`تم التحديث: ${data.prices?.refreshed || 0} سهم`);
+      toast.success(`Data refreshed: ${data.prices?.refreshed || 0} stocks updated`);
     },
     onError: () => {
-      toast.error('فشل تحديث البيانات');
+      toast.error('Failed to refresh data');
     },
   });
+}
+
+// ============================================================
+// Theme Toggle Component
+// ============================================================
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    requestAnimationFrame(() => setMounted(true));
+  }, []);
+
+  if (!mounted) {
+    return <Button variant="ghost" size="sm" className="h-9 w-9 p-0"><Sun className="h-4 w-4" /></Button>;
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-9 w-9 p-0"
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+    >
+      {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+    </Button>
+  );
 }
 
 // ============================================================
@@ -330,23 +362,19 @@ export default function EGXProPlatform() {
   const filteredStocks = useMemo(() => {
     let result = [...stocks];
 
-    // Search filter
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       result = result.filter(s =>
         s.ticker.toLowerCase().includes(q) ||
         s.name.toLowerCase().includes(q) ||
-        s.nameAr.includes(q) ||
         s.sector.toLowerCase().includes(q)
       );
     }
 
-    // Sector filter
     if (selectedSector !== 'all') {
       result = result.filter(s => s.sector === selectedSector);
     }
 
-    // Sort
     result.sort((a, b) => {
       const aVal = (a as Record<string, unknown>)[sortBy] as number || 0;
       const bVal = (b as Record<string, unknown>)[sortBy] as number || 0;
@@ -361,7 +389,10 @@ export default function EGXProPlatform() {
     const totalMarketCap = stocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
     const stocksCount = stocks.length;
     const sectorsCount = new Set(stocks.map(s => s.sector)).size;
-    const avgPE = stocks.filter(s => s.peRatio > 0).reduce((sum, s) => sum + s.peRatio, 0) / (stocks.filter(s => s.peRatio > 0).length || 1);
+    const stocksWithPE = stocks.filter(s => s.peRatio > 0);
+    const avgPE = stocksWithPE.length > 0
+      ? stocksWithPE.reduce((sum, s) => sum + s.peRatio, 0) / stocksWithPE.length
+      : 0;
     const pricedStocks = stocks.filter(s => s.price > 0);
     const topGainers = [...pricedStocks].sort((a, b) => {
       const aChange = a.fiftyTwoWeekHigh ? ((a.price - a.fiftyTwoWeekHigh * 0.95) / (a.fiftyTwoWeekHigh * 0.95)) : 0;
@@ -386,7 +417,7 @@ export default function EGXProPlatform() {
     });
     return Array.from(sectorMap.entries())
       .map(([sector, value]) => ({
-        name: SECTOR_NAMES_AR[sector] || sector,
+        name: sector,
         sector,
         value,
       }))
@@ -403,17 +434,18 @@ export default function EGXProPlatform() {
     }
   };
 
-  const SortIcon = ({ field }: { field: string }) => {
-    if (sortBy !== field) return null;
-    return sortDir === 'desc' ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />;
-  };
+  // Unique sectors for filter
+  const uniqueSectors = useMemo(() => {
+    const s = new Set(stocks.map(st => st.sector));
+    return Array.from(s).sort();
+  }, [stocks]);
 
   // ============================================================
   // Render
   // ============================================================
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 py-3">
@@ -424,15 +456,16 @@ export default function EGXProPlatform() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white">EGX Pro</h1>
-                <p className="text-xs text-slate-500 dark:text-slate-400">منصة تقييم الأسهم المصرية</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Egyptian Stock Valuation Platform</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="hidden sm:flex items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
-                <span>{stats.stocksCount} سهم</span>
-                <span className="text-slate-300">|</span>
-                <span>{stats.sectorsCount} قطاع</span>
+                <span>{stats.stocksCount} Stocks</span>
+                <span className="text-slate-300 dark:text-slate-600">|</span>
+                <span>{stats.sectorsCount} Sectors</span>
               </div>
+              <ThemeToggle />
               <Button
                 variant="outline"
                 size="sm"
@@ -441,7 +474,7 @@ export default function EGXProPlatform() {
                 className="gap-2"
               >
                 <RefreshCw className={`w-4 h-4 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
-                تحديث البيانات
+                <span className="hidden sm:inline">Refresh</span>
               </Button>
             </div>
           </div>
@@ -449,24 +482,20 @@ export default function EGXProPlatform() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="flex-1 max-w-7xl mx-auto px-4 py-6 w-full">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 max-w-lg mx-auto">
+          <TabsList className="grid w-full grid-cols-3 max-w-md mx-auto">
             <TabsTrigger value="dashboard" className="gap-2 text-xs sm:text-sm">
               <LayoutDashboard className="w-4 h-4" />
-              <span className="hidden sm:inline">لوحة التحكم</span>
+              <span className="hidden sm:inline">Dashboard</span>
             </TabsTrigger>
             <TabsTrigger value="stocks" className="gap-2 text-xs sm:text-sm">
               <List className="w-4 h-4" />
-              <span className="hidden sm:inline">الأسهم</span>
+              <span className="hidden sm:inline">Stocks</span>
             </TabsTrigger>
             <TabsTrigger value="sectors" className="gap-2 text-xs sm:text-sm">
               <PieChart className="w-4 h-4" />
-              <span className="hidden sm:inline">القطاعات</span>
-            </TabsTrigger>
-            <TabsTrigger value="calculator" className="gap-2 text-xs sm:text-sm">
-              <Calculator className="w-4 h-4" />
-              <span className="hidden sm:inline">الحاسبة</span>
+              <span className="hidden sm:inline">Sectors</span>
             </TabsTrigger>
           </TabsList>
 
@@ -476,28 +505,40 @@ export default function EGXProPlatform() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">إجمالي القيمة السوقية</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Total Market Cap</p>
+                  </div>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">
                     {stats.totalMarketCap > 0 ? formatMarketCap(stats.totalMarketCap) : '—'}
                   </p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">عدد الأسهم</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">{stats.stocksCount}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <List className="w-4 h-4 text-blue-600" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Total Stocks</p>
+                  </div>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{stats.stocksCount}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">القطاعات</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">{stats.sectorsCount}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Building2 className="w-4 h-4 text-purple-600" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Sectors</p>
+                  </div>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{stats.sectorsCount}</p>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-sm text-slate-500 dark:text-slate-400">متوسط م/ر</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white mt-1">{stats.avgPE > 0 ? stats.avgPE.toFixed(1) : '—'}</p>
+                  <div className="flex items-center gap-2 mb-1">
+                    <Activity className="w-4 h-4 text-amber-600" />
+                    <p className="text-sm text-slate-500 dark:text-slate-400">Avg P/E Ratio</p>
+                  </div>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{stats.avgPE > 0 ? stats.avgPE.toFixed(1) : '—'}</p>
                 </CardContent>
               </Card>
             </div>
@@ -508,7 +549,7 @@ export default function EGXProPlatform() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <TrendingUp className="w-5 h-5 text-emerald-600" />
-                    الأكثر ارتفاعاً
+                    Top Gainers
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -517,20 +558,20 @@ export default function EGXProPlatform() {
                       {stats.topGainers.map(s => (
                         <button
                           key={s.ticker}
-                          onClick={() => { setSelectedTicker(s.ticker); setActiveTab('stocks'); }}
+                          onClick={() => { setSelectedTicker(s.ticker); }}
                           className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                         >
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-700 dark:text-emerald-400 text-xs font-bold">
                               {s.ticker.slice(0, 2)}
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-medium">{s.nameAr || s.name}</p>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">{s.name}</p>
                               <p className="text-xs text-slate-500">{s.ticker}</p>
                             </div>
                           </div>
-                          <div className="text-left">
-                            <p className="text-sm font-bold">{formatPrice(s.price)}</p>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{formatPrice(s.price)}</p>
                           </div>
                         </button>
                       ))}
@@ -538,7 +579,7 @@ export default function EGXProPlatform() {
                   ) : (
                     <div className="text-center py-8 text-slate-400">
                       <Info className="w-8 h-8 mx-auto mb-2" />
-                      <p className="text-sm">اضغط &quot;تحديث البيانات&quot; لجلب الأسعار</p>
+                      <p className="text-sm">Click &quot;Refresh&quot; to fetch prices</p>
                     </div>
                   )}
                 </CardContent>
@@ -549,7 +590,7 @@ export default function EGXProPlatform() {
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
                     <TrendingDown className="w-5 h-5 text-red-600" />
-                    الأكثر انخفاضاً
+                    Top Losers
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -558,20 +599,20 @@ export default function EGXProPlatform() {
                       {stats.topLosers.map(s => (
                         <button
                           key={s.ticker}
-                          onClick={() => { setSelectedTicker(s.ticker); setActiveTab('stocks'); }}
+                          onClick={() => { setSelectedTicker(s.ticker); }}
                           className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                         >
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-700 dark:text-red-400 text-xs font-bold">
                               {s.ticker.slice(0, 2)}
                             </div>
-                            <div className="text-right">
-                              <p className="text-sm font-medium">{s.nameAr || s.name}</p>
+                            <div className="text-left">
+                              <p className="text-sm font-medium">{s.name}</p>
                               <p className="text-xs text-slate-500">{s.ticker}</p>
                             </div>
                           </div>
-                          <div className="text-left">
-                            <p className="text-sm font-bold">{formatPrice(s.price)}</p>
+                          <div className="text-right">
+                            <p className="text-sm font-bold text-red-600 dark:text-red-400">{formatPrice(s.price)}</p>
                           </div>
                         </button>
                       ))}
@@ -579,7 +620,7 @@ export default function EGXProPlatform() {
                   ) : (
                     <div className="text-center py-8 text-slate-400">
                       <Info className="w-8 h-8 mx-auto mb-2" />
-                      <p className="text-sm">اضغط &quot;تحديث البيانات&quot; لجلب الأسعار</p>
+                      <p className="text-sm">Click &quot;Refresh&quot; to fetch prices</p>
                     </div>
                   )}
                 </CardContent>
@@ -589,8 +630,8 @@ export default function EGXProPlatform() {
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
-                    <PieChart className="w-5 h-5 text-blue-600" />
-                    توزيع القطاعات
+                    <PieChart className="w-5 h-5 text-purple-600" />
+                    Sector Distribution
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -611,12 +652,13 @@ export default function EGXProPlatform() {
                           ))}
                         </Pie>
                         <Tooltip formatter={(value: number) => formatMarketCap(value)} />
+                        <Legend formatter={(value: string) => <span className="text-xs text-slate-600 dark:text-slate-300">{value}</span>} />
                       </RechartsPie>
                     </ResponsiveContainer>
                   ) : (
                     <div className="text-center py-8 text-slate-400">
                       <Info className="w-8 h-8 mx-auto mb-2" />
-                      <p className="text-sm">لا توجد بيانات</p>
+                      <p className="text-sm">No data available</p>
                     </div>
                   )}
                 </CardContent>
@@ -627,9 +669,9 @@ export default function EGXProPlatform() {
             <Card>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">أبرز الأسهم</CardTitle>
+                  <CardTitle className="text-base">Featured Stocks</CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => setActiveTab('stocks')}>
-                    عرض الكل <ArrowUpRight className="w-4 h-4 mr-1" />
+                    View All <ArrowUpRight className="w-4 h-4 ml-1" />
                   </Button>
                 </div>
               </CardHeader>
@@ -645,8 +687,8 @@ export default function EGXProPlatform() {
                     {stocks.slice(0, 18).map(s => (
                       <button
                         key={s.ticker}
-                        onClick={() => { setSelectedTicker(s.ticker); setActiveTab('stocks'); }}
-                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-md transition-all text-right"
+                        onClick={() => setSelectedTicker(s.ticker)}
+                        className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-md transition-all text-left"
                       >
                         <div className="flex items-center gap-2 mb-2">
                           <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-700 dark:text-emerald-400 text-xs font-bold shrink-0">
@@ -654,12 +696,12 @@ export default function EGXProPlatform() {
                           </div>
                           <div className="min-w-0">
                             <p className="text-xs font-bold truncate">{s.ticker}</p>
-                            <p className="text-[10px] text-slate-500 truncate">{s.nameAr || s.name}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{s.name}</p>
                           </div>
                         </div>
                         <p className="text-sm font-bold">{s.price > 0 ? formatPrice(s.price) : '—'}</p>
                         {s.sector && (
-                          <p className="text-[10px] text-slate-400 mt-1">{SECTOR_NAMES_AR[s.sector] || s.sector}</p>
+                          <p className="text-[10px] text-slate-400 mt-1">{s.sector}</p>
                         )}
                       </button>
                     ))}
@@ -674,12 +716,12 @@ export default function EGXProPlatform() {
             {/* Search & Filter Bar */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
-                  placeholder="بحث بالاسم أو الرمز..."
+                  placeholder="Search by name or ticker..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-10"
+                  className="pl-10"
                 />
               </div>
               <select
@@ -687,15 +729,15 @@ export default function EGXProPlatform() {
                 onChange={(e) => setSelectedSector(e.target.value)}
                 className="px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
               >
-                <option value="all">جميع القطاعات</option>
-                {Object.entries(SECTOR_NAMES_AR).map(([en, ar]) => (
-                  <option key={en} value={en}>{ar}</option>
+                <option value="all">All Sectors</option>
+                {uniqueSectors.map(sector => (
+                  <option key={sector} value={sector}>{sector}</option>
                 ))}
               </select>
             </div>
 
-            <div className="text-sm text-slate-500 mb-2">
-              عرض {filteredStocks.length} من أصل {stocks.length} سهم
+            <div className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+              Showing {filteredStocks.length} of {stocks.length} stocks
             </div>
 
             {/* Stock Table */}
@@ -705,24 +747,24 @@ export default function EGXProPlatform() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="cursor-pointer text-right" onClick={() => handleSort('ticker')}>
-                          الرمز <SortIcon field="ticker" />
+                        <TableHead className="cursor-pointer" onClick={() => handleSort('ticker')}>
+                          Ticker {sortBy === 'ticker' && (sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />)}
                         </TableHead>
-                        <TableHead className="text-right">الاسم</TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => handleSort('price')}>
-                          السعر <SortIcon field="price" />
+                        <TableHead>Name</TableHead>
+                        <TableHead className="cursor-pointer" onClick={() => handleSort('price')}>
+                          Price {sortBy === 'price' && (sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />)}
                         </TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => handleSort('peRatio')}>
-                          م/ر <SortIcon field="peRatio" />
+                        <TableHead className="cursor-pointer hidden md:table-cell" onClick={() => handleSort('peRatio')}>
+                          P/E {sortBy === 'peRatio' && (sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />)}
                         </TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => handleSort('pbRatio')}>
-                          م/ق <SortIcon field="pbRatio" />
+                        <TableHead className="cursor-pointer hidden md:table-cell" onClick={() => handleSort('pbRatio')}>
+                          P/B {sortBy === 'pbRatio' && (sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />)}
                         </TableHead>
-                        <TableHead className="cursor-pointer text-right" onClick={() => handleSort('marketCap')}>
-                          القيمة السوقية <SortIcon field="marketCap" />
+                        <TableHead className="cursor-pointer hidden lg:table-cell" onClick={() => handleSort('marketCap')}>
+                          Market Cap {sortBy === 'marketCap' && (sortDir === 'desc' ? <ChevronDown className="w-3 h-3 inline" /> : <ChevronUp className="w-3 h-3 inline" />)}
                         </TableHead>
-                        <TableHead className="text-right">القطاع</TableHead>
-                        <TableHead className="text-right"></TableHead>
+                        <TableHead className="hidden sm:table-cell">Sector</TableHead>
+                        <TableHead></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -737,7 +779,7 @@ export default function EGXProPlatform() {
                       ) : filteredStocks.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={8} className="text-center py-8 text-slate-400">
-                            لا توجد نتائج
+                            No results found
                           </TableCell>
                         </TableRow>
                       ) : (
@@ -752,19 +794,18 @@ export default function EGXProPlatform() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="text-sm font-medium">{s.nameAr || s.name}</p>
-                                <p className="text-xs text-slate-400">{s.name}</p>
+                                <p className="text-sm font-medium">{s.name}</p>
                               </div>
                             </TableCell>
                             <TableCell className="font-bold">
                               {s.price > 0 ? formatPrice(s.price) : '—'}
                             </TableCell>
-                            <TableCell>{s.peRatio > 0 ? s.peRatio.toFixed(1) : '—'}</TableCell>
-                            <TableCell>{s.pbRatio > 0 ? s.pbRatio.toFixed(2) : '—'}</TableCell>
-                            <TableCell>{s.marketCap > 0 ? formatMarketCap(s.marketCap) : '—'}</TableCell>
-                            <TableCell>
+                            <TableCell className="hidden md:table-cell">{s.peRatio > 0 ? s.peRatio.toFixed(1) : '—'}</TableCell>
+                            <TableCell className="hidden md:table-cell">{s.pbRatio > 0 ? s.pbRatio.toFixed(2) : '—'}</TableCell>
+                            <TableCell className="hidden lg:table-cell">{s.marketCap > 0 ? formatMarketCap(s.marketCap) : '—'}</TableCell>
+                            <TableCell className="hidden sm:table-cell">
                               <Badge variant="outline" className="text-[10px]">
-                                {SECTOR_NAMES_AR[s.sector] || s.sector}
+                                {s.sector}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -785,38 +826,38 @@ export default function EGXProPlatform() {
           {/* ==================== SECTORS TAB ==================== */}
           <TabsContent value="sectors" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {Object.entries(SECTOR_NAMES_AR).map(([sectorEn, sectorAr]) => {
-                const sectorStocks = stocks.filter(s => s.sector === sectorEn);
-                const sectorStat = sectors.find(s => s.sector === sectorEn);
+              {uniqueSectors.map(sectorName => {
+                const sectorStocks = stocks.filter(s => s.sector === sectorName);
+                const sectorStat = sectors.find(s => s.sector === sectorName);
                 const sectorMcap = sectorStocks.reduce((sum, s) => sum + (s.marketCap || 0), 0);
 
                 return (
-                  <Card key={sectorEn} className="hover:shadow-md transition-shadow">
+                  <Card key={sectorName} className="hover:shadow-md transition-shadow">
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                          <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-lg">
+                          {SECTOR_ICONS[sectorName] || '📊'}
                         </div>
                         <div>
-                          <p className="font-bold text-sm">{sectorAr}</p>
-                          <p className="text-xs text-slate-400">{sectorStocks.length} سهم</p>
+                          <p className="font-bold text-sm">{sectorName}</p>
+                          <p className="text-xs text-slate-400">{sectorStocks.length} stocks</p>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
-                          <p className="text-slate-400">متوسط م/ر</p>
+                          <p className="text-slate-400">Avg P/E</p>
                           <p className="font-bold">{sectorStat?.avgPE ? sectorStat.avgPE.toFixed(1) : '—'}</p>
                         </div>
                         <div>
-                          <p className="text-slate-400">متوسط م/ق</p>
+                          <p className="text-slate-400">Avg P/B</p>
                           <p className="font-bold">{sectorStat?.avgPB ? sectorStat.avgPB.toFixed(2) : '—'}</p>
                         </div>
                         <div>
-                          <p className="text-slate-400">القيمة السوقية</p>
+                          <p className="text-slate-400">Market Cap</p>
                           <p className="font-bold">{sectorMcap > 0 ? formatMarketCap(sectorMcap) : '—'}</p>
                         </div>
                         <div>
-                          <p className="text-slate-400">العائد على حقوق الملكية</p>
+                          <p className="text-slate-400">Avg ROE</p>
                           <p className="font-bold">{sectorStat?.avgROE ? (sectorStat.avgROE * 100).toFixed(1) + '%' : '—'}</p>
                         </div>
                       </div>
@@ -827,8 +868,8 @@ export default function EGXProPlatform() {
                               <Badge
                                 key={s.ticker}
                                 variant="secondary"
-                                className="text-[10px] cursor-pointer hover:bg-emerald-100"
-                                onClick={() => { setSelectedTicker(s.ticker); setActiveTab('stocks'); }}
+                                className="text-[10px] cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                                onClick={() => setSelectedTicker(s.ticker)}
                               >
                                 {s.ticker}
                               </Badge>
@@ -846,11 +887,6 @@ export default function EGXProPlatform() {
                 );
               })}
             </div>
-          </TabsContent>
-
-          {/* ==================== CALCULATOR TAB ==================== */}
-          <TabsContent value="calculator" className="space-y-6">
-            <CalculatorPanel stocks={stocks} />
           </TabsContent>
         </Tabs>
       </main>
@@ -870,16 +906,16 @@ export default function EGXProPlatform() {
             <StockDetailPanel detail={stockDetail} onClose={() => setSelectedTicker(null)} />
           ) : (
             <div className="py-8 text-center text-slate-400">
-              <p>لا توجد بيانات</p>
+              <p>No data available</p>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
       {/* Footer */}
-      <footer className="mt-12 border-t border-slate-200 dark:border-slate-800 py-6">
+      <footer className="mt-auto border-t border-slate-200 dark:border-slate-800 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-slate-400">
-          <p>EGX Pro - منصة تقييم الأسهم المصرية | جميع البيانات للأغراض التعليمية فقط</p>
+          <p>EGX Pro — Egyptian Stock Valuation Platform | All data for educational purposes only</p>
         </div>
       </footer>
     </div>
@@ -894,13 +930,12 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
   const { stock, valuation, sectorAvg } = detail;
   const priceHistory = stock.priceHistory || [];
 
-  // Chart data for price history
   const chartData = useMemo(() => {
     return priceHistory
       .slice(0, 180)
       .reverse()
       .map(p => ({
-        date: new Date(p.date).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' }),
+        date: new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         close: p.close,
         volume: p.volume,
       }));
@@ -914,12 +949,12 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
       <DialogHeader>
         <div className="flex items-center justify-between">
           <DialogTitle className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-700 dark:text-emerald-400 font-bold text-lg">
               {stock.ticker.slice(0, 3)}
             </div>
             <div>
-              <p className="text-lg font-bold">{stock.nameAr || stock.name}</p>
-              <p className="text-sm text-slate-500">{stock.ticker} • {SECTOR_NAMES_AR[stock.sector] || stock.sector}</p>
+              <p className="text-lg font-bold">{stock.name}</p>
+              <p className="text-sm text-slate-500">{stock.ticker} • {stock.sector}</p>
             </div>
           </DialogTitle>
           <Button variant="ghost" size="sm" onClick={onClose}>
@@ -932,115 +967,109 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-900/10 border-emerald-200 dark:border-emerald-800">
           <CardContent className="p-3">
-            <p className="text-xs text-emerald-600 dark:text-emerald-400">السعر الحالي</p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">Current Price</p>
             <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">{formatPrice(stock.price)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3">
-            <p className="text-xs text-slate-500">مكرر الربحية</p>
+            <p className="text-xs text-slate-500">P/E Ratio</p>
             <p className="text-xl font-bold">{stock.peRatio > 0 ? stock.peRatio.toFixed(1) : '—'}</p>
-            <p className="text-[10px] text-slate-400">القطاع: {sectorAvg?.avgPE?.toFixed(1) || '—'}</p>
+            <p className="text-[10px] text-slate-400">Sector: {sectorAvg?.avgPE?.toFixed(1) || '—'}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3">
-            <p className="text-xs text-slate-500">مكرر القيمة الدفترية</p>
+            <p className="text-xs text-slate-500">P/B Ratio</p>
             <p className="text-xl font-bold">{stock.pbRatio > 0 ? stock.pbRatio.toFixed(2) : '—'}</p>
-            <p className="text-[10px] text-slate-400">القطاع: {sectorAvg?.avgPB?.toFixed(2) || '—'}</p>
+            <p className="text-[10px] text-slate-400">Sector: {sectorAvg?.avgPB?.toFixed(2) || '—'}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-3">
-            <p className="text-xs text-slate-500">القيمة السوقية</p>
+            <p className="text-xs text-slate-500">Market Cap</p>
             <p className="text-xl font-bold">{formatMarketCap(stock.marketCap)}</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Valuation Summary */}
+      {/* Auto-Calculated Fair Value Section */}
       {valuation && (
-        <Card className="border-2 border-emerald-200 dark:border-emerald-800">
+        <Card className="border-2 border-emerald-200 dark:border-emerald-800 bg-gradient-to-r from-emerald-50/50 to-white dark:from-emerald-900/10 dark:to-slate-900">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-emerald-600" />
-              نتيجة التقييم الشامل
+              <Target className="w-5 h-5 text-emerald-600" />
+              Fair Value Analysis
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                <p className="text-xs text-slate-400">القيمة العادلة (متوسط)</p>
-                <p className="text-lg font-bold text-emerald-600">{formatPrice(valuation.averageFairValue)}</p>
+              <div>
+                <p className="text-xs text-slate-500">Average Fair Value</p>
+                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">{formatPrice(valuation.averageFairValue)}</p>
               </div>
-              <div className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                <p className="text-xs text-slate-400">القيمة العادلة (وسيط)</p>
-                <p className="text-lg font-bold">{formatPrice(valuation.medianFairValue)}</p>
+              <div>
+                <p className="text-xs text-slate-500">Median Fair Value</p>
+                <p className="text-2xl font-bold">{formatPrice(valuation.medianFairValue)}</p>
               </div>
-              <div className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                <p className="text-xs text-slate-400">التفوق المتوقع</p>
-                <p className={`text-lg font-bold ${valuation.averageUpside > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              <div>
+                <p className="text-xs text-slate-500">Upside / Downside</p>
+                <p className={`text-2xl font-bold ${getVerdictColor(valuation.overallVerdict)}`}>
                   {valuation.averageUpside > 0 ? '+' : ''}{valuation.averageUpside.toFixed(1)}%
                 </p>
               </div>
-              <div className="text-center p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-                <p className="text-xs text-slate-400">التوصية</p>
-                <Badge className={`text-sm ${getVerdictBg(valuation.overallVerdict)}`}>
-                  {getOverallVerdictAr(valuation.overallVerdict)}
+              <div>
+                <p className="text-xs text-slate-500">Verdict</p>
+                <Badge className={`text-sm px-3 py-1 ${getVerdictBg(valuation.overallVerdict)}`}>
+                  {getOverallVerdictLabel(valuation.overallVerdict)}
                 </Badge>
+                <p className="text-[10px] text-slate-400 mt-1">Confidence: {(valuation.confidenceScore * 100).toFixed(0)}%</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Info className="w-3 h-3" />
-              <span>مستوى الثقة: {(valuation.confidenceScore * 100).toFixed(0)}% | بناءً على {valuation.models.filter(m => m.fairValue > 0).length} نماذج</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Individual Models */}
-      {valuation && valuation.models.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">تفاصيل نماذج التقييم</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {valuation.models.map(model => (
-                <div
-                  key={model.model}
-                  className="p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-700 transition-colors"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-bold">{model.modelNameAr}</p>
-                      <p className="text-[10px] text-slate-400">{model.modelName}</p>
-                    </div>
-                    <Badge className={`text-[10px] ${getVerdictBg(model.verdict)}`}>
-                      {getVerdictAr(model.verdict)}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2 text-xs">
-                    <div>
-                      <p className="text-slate-400">القيمة العادلة</p>
-                      <p className="font-bold">{model.fairValue > 0 ? formatPrice(model.fairValue) : '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">التفوق</p>
-                      <p className={`font-bold ${model.upsideDownside > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {model.upsideDownside > 0 ? '+' : ''}{model.upsideDownside.toFixed(1)}%
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400">الثقة</p>
-                      <p className="font-bold">{(model.confidence * 100).toFixed(0)}%</p>
-                    </div>
-                  </div>
-                  {model.confidence > 0 && (
-                    <Progress value={model.confidence * 100} className="h-1 mt-2" />
-                  )}
-                </div>
-              ))}
+            {/* Model Results Table */}
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Fair Value</TableHead>
+                    <TableHead>Upside</TableHead>
+                    <TableHead>Verdict</TableHead>
+                    <TableHead className="hidden md:table-cell">Confidence</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {valuation.models.map((m) => (
+                    <TableRow key={m.model}>
+                      <TableCell className="font-medium text-sm">{m.modelName}</TableCell>
+                      <TableCell className="font-bold">{formatPrice(m.fairValue)}</TableCell>
+                      <TableCell className={getVerdictColor(m.verdict)}>
+                        <span className="flex items-center gap-1">
+                          {m.upsideDownside > 0 ? <ArrowUpRight className="w-3 h-3" /> : m.upsideDownside < 0 ? <ArrowDownRight className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+                          {m.upsideDownside > 0 ? '+' : ''}{m.upsideDownside.toFixed(1)}%
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-[10px] ${getVerdictBg(m.verdict)}`}>
+                          {getVerdictLabel(m.verdict)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded-full"
+                              style={{ width: `${m.confidence * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-xs text-slate-500">{(m.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           </CardContent>
         </Card>
@@ -1050,94 +1079,179 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
       {chartData.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">السعر التاريخي</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-600" />
+              Price History
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
+            <ResponsiveContainer width="100%" height={300}>
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                 <YAxis tick={{ fontSize: 10 }} />
                 <Tooltip />
-                <Line type="monotone" dataKey="close" stroke="#10b981" strokeWidth={2} dot={false} name="السعر" />
+                <Line type="monotone" dataKey="close" stroke="#10b981" strokeWidth={2} dot={false} name="Close" />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       )}
 
-      {/* Financial Metrics */}
-      {latestFinancial && (
+      {/* Key Metrics & Technical Indicators */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Key Metrics */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">المؤشرات المالية ({latestFinancial.year})</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Shield className="w-5 h-5 text-purple-600" />
+              Key Metrics
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div>
-                <p className="text-slate-400 text-xs">الإيرادات</p>
-                <p className="font-bold">{formatMarketCap(latestFinancial.revenue)}</p>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-500">EPS</span>
+                <span className="font-bold">{stock.eps > 0 ? stock.eps.toFixed(2) : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">صافي الربح</p>
-                <p className="font-bold">{formatMarketCap(latestFinancial.netIncome)}</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">Book Value/Share</span>
+                <span className="font-bold">{stock.bookValuePerShare > 0 ? stock.bookValuePerShare.toFixed(2) : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">هامش الربح</p>
-                <p className="font-bold">{(latestFinancial.profitMargin * 100).toFixed(1)}%</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">Dividend Yield</span>
+                <span className="font-bold">{stock.dividendYield > 0 ? stock.dividendYield.toFixed(1) + '%' : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">العائد على حقوق الملكية</p>
-                <p className="font-bold">{(latestFinancial.roe * 100).toFixed(1)}%</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">Beta</span>
+                <span className="font-bold">{stock.beta > 0 ? stock.beta.toFixed(2) : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">العائد على الأصول</p>
-                <p className="font-bold">{(latestFinancial.roa * 100).toFixed(1)}%</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">52-Week High</span>
+                <span className="font-bold text-red-600 dark:text-red-400">{stock.fiftyTwoWeekHigh > 0 ? formatPrice(stock.fiftyTwoWeekHigh) : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">الدين/حقوق الملكية</p>
-                <p className="font-bold">{latestFinancial.debtToEquity.toFixed(2)}</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">52-Week Low</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{stock.fiftyTwoWeekLow > 0 ? formatPrice(stock.fiftyTwoWeekLow) : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">هامش مجمل</p>
-                <p className="font-bold">{(latestFinancial.grossMargin * 100).toFixed(1)}%</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">Shares Outstanding</span>
+                <span className="font-bold">{stock.sharesOutstanding > 0 ? formatNumber(stock.sharesOutstanding) : '—'}</span>
               </div>
-              <div>
-                <p className="text-slate-400 text-xs">هامش التشغيل</p>
-                <p className="font-bold">{(latestFinancial.operatingMargin * 100).toFixed(1)}%</p>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-slate-500">Avg Volume</span>
+                <span className="font-bold">{stock.avgVolume > 0 ? formatNumber(stock.avgVolume) : '—'}</span>
               </div>
             </div>
           </CardContent>
         </Card>
-      )}
 
-      {/* Technical Indicators */}
-      {latestTech && (
+        {/* Technical Indicators */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">المؤشرات الفنية</CardTitle>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Activity className="w-5 h-5 text-amber-600" />
+              Technical Indicators
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {latestTech ? (
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">RSI (14)</span>
+                  <span className={`font-bold ${latestTech.rsi14 > 70 ? 'text-red-600' : latestTech.rsi14 < 30 ? 'text-emerald-600' : ''}`}>
+                    {latestTech.rsi14.toFixed(1)}
+                    {latestTech.rsi14 > 70 ? ' (Overbought)' : latestTech.rsi14 < 30 ? ' (Oversold)' : ''}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span className="text-slate-500">MACD Line</span>
+                  <span className="font-bold">{latestTech.macdLine.toFixed(2)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span className="text-slate-500">MACD Signal</span>
+                  <span className="font-bold">{latestTech.macdSignal.toFixed(2)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span className="text-slate-500">MACD Histogram</span>
+                  <span className={`font-bold ${latestTech.macdHist > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {latestTech.macdHist.toFixed(2)}
+                  </span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Bollinger Upper</span>
+                  <span className="font-bold">{latestTech.bbUpper.toFixed(2)}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Bollinger Lower</span>
+                  <span className="font-bold">{latestTech.bbLower.toFixed(2)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-slate-400">
+                <Activity className="w-8 h-8 mx-auto mb-2" />
+                <p className="text-sm">No technical data available</p>
+                <p className="text-xs mt-1">Refresh data to compute indicators</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Financial Data */}
+      {latestFinancial && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-600" />
+              Financial Data (FY {latestFinancial.year})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
-                <p className="text-slate-400 text-xs">RSI (14)</p>
-                <p className={`font-bold ${latestTech.rsi14 > 70 ? 'text-red-600' : latestTech.rsi14 < 30 ? 'text-emerald-600' : ''}`}>
-                  {latestTech.rsi14.toFixed(1)}
-                </p>
+                <p className="text-xs text-slate-500">Revenue</p>
+                <p className="font-bold">{formatMarketCap(latestFinancial.revenue)}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">MACD</p>
-                <p className={`font-bold ${latestTech.macdHist > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {latestTech.macdLine.toFixed(2)}
-                </p>
+                <p className="text-xs text-slate-500">Net Income</p>
+                <p className="font-bold">{formatMarketCap(latestFinancial.netIncome)}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">بولينجر (أعلى)</p>
-                <p className="font-bold">{latestTech.bbUpper.toFixed(2)}</p>
+                <p className="text-xs text-slate-500">Total Assets</p>
+                <p className="font-bold">{formatMarketCap(latestFinancial.totalAssets)}</p>
               </div>
               <div>
-                <p className="text-slate-400 text-xs">بولينجر (أسفل)</p>
-                <p className="font-bold">{latestTech.bbLower.toFixed(2)}</p>
+                <p className="text-xs text-slate-500">Total Equity</p>
+                <p className="font-bold">{formatMarketCap(latestFinancial.totalEquity)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Total Debt</p>
+                <p className="font-bold">{formatMarketCap(latestFinancial.totalDebt)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">ROE</p>
+                <p className="font-bold">{latestFinancial.roe > 0 ? (latestFinancial.roe * 100).toFixed(1) + '%' : '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Gross Margin</p>
+                <p className="font-bold">{latestFinancial.grossMargin > 0 ? (latestFinancial.grossMargin * 100).toFixed(1) + '%' : '—'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500">Profit Margin</p>
+                <p className="font-bold">{latestFinancial.profitMargin > 0 ? (latestFinancial.profitMargin * 100).toFixed(1) + '%' : '—'}</p>
               </div>
             </div>
           </CardContent>
@@ -1145,241 +1259,13 @@ function StockDetailPanel({ detail, onClose }: { detail: StockDetail; onClose: (
       )}
 
       {/* Description */}
-      {(stock.descriptionAr || stock.description) && (
+      {stock.description && (
         <Card>
           <CardContent className="p-4">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              {stock.descriptionAr || stock.description}
-            </p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{stock.description}</p>
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
-
-// ============================================================
-// Calculator Panel Component
-// ============================================================
-
-function CalculatorPanel({ stocks }: { stocks: StockData[] }) {
-  const [selectedStock, setSelectedStock] = useState('');
-  const [growthRate, setGrowthRate] = useState('5');
-  const [discountRate, setDiscountRate] = useState('18');
-  const [terminalGrowth, setTerminalGrowth] = useState('2');
-  const [results, setResults] = useState<ValuationModelResult[] | null>(null);
-  const [calculating, setCalculating] = useState(false);
-
-  const stock = stocks.find(s => s.ticker === selectedStock);
-
-  const handleCalculate = useCallback(async () => {
-    if (!selectedStock) {
-      toast.error('اختر سهماً أولاً');
-      return;
-    }
-
-    setCalculating(true);
-    try {
-      const res = await fetch(`/api/stocks/${selectedStock}`);
-      if (!res.ok) throw new Error('فشل تحميل البيانات');
-      const data = await res.json();
-
-      if (data.valuation) {
-        setResults(data.valuation.models);
-      } else {
-        toast.info('لا توجد بيانات كافية للتقييم. اضغط تحديث البيانات أولاً.');
-        setResults([]);
-      }
-    } catch (error) {
-      toast.error('فشل حساب التقييم');
-    } finally {
-      setCalculating(false);
-    }
-  }, [selectedStock]);
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calculator className="w-5 h-5 text-emerald-600" />
-            حاسبة التقييم
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm text-slate-500 mb-1 block">اختر السهم</label>
-            <select
-              value={selectedStock}
-              onChange={(e) => setSelectedStock(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm"
-            >
-              <option value="">-- اختر سهم --</option>
-              {stocks.map(s => (
-                <option key={s.ticker} value={s.ticker}>
-                  {s.ticker} - {s.nameAr || s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {stock && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800">
-              <div>
-                <p className="text-xs text-slate-400">السعر</p>
-                <p className="font-bold">{stock.price > 0 ? formatPrice(stock.price) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">م/ر</p>
-                <p className="font-bold">{stock.peRatio > 0 ? stock.peRatio.toFixed(1) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">ربحية السهم</p>
-                <p className="font-bold">{stock.eps > 0 ? stock.eps.toFixed(2) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400">القيمة الدفترية</p>
-                <p className="font-bold">{stock.bookValuePerShare > 0 ? stock.bookValuePerShare.toFixed(2) : '—'}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm text-slate-500 mb-1 block">معدل النمو (%)</label>
-              <Input
-                type="number"
-                value={growthRate}
-                onChange={(e) => setGrowthRate(e.target.value)}
-                placeholder="5"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-slate-500 mb-1 block">معدل الخصم (%)</label>
-              <Input
-                type="number"
-                value={discountRate}
-                onChange={(e) => setDiscountRate(e.target.value)}
-                placeholder="18"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-slate-500 mb-1 block">النمو النهائي (%)</label>
-              <Input
-                type="number"
-                value={terminalGrowth}
-                onChange={(e) => setTerminalGrowth(e.target.value)}
-                placeholder="2"
-              />
-            </div>
-          </div>
-
-          <Button
-            onClick={handleCalculate}
-            disabled={calculating || !selectedStock}
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            {calculating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                جاري الحساب...
-              </>
-            ) : (
-              'حساب القيمة العادلة'
-            )}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Results */}
-      {results && results.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">نتائج التقييم - {selectedStock}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {results.map(model => (
-                <div
-                  key={model.model}
-                  className="p-4 rounded-xl border border-slate-200 dark:border-slate-700"
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-bold">{model.modelNameAr}</p>
-                      <p className="text-xs text-slate-400">{model.modelName}</p>
-                    </div>
-                    <Badge className={getVerdictBg(model.verdict)}>
-                      {getVerdictAr(model.verdict)}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div>
-                      <p className="text-slate-400 text-xs">القيمة العادلة</p>
-                      <p className="text-lg font-bold">{model.fairValue > 0 ? formatPrice(model.fairValue) : '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-400 text-xs">التفوق/النقص</p>
-                      <p className={`text-lg font-bold ${model.upsideDownside > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {model.upsideDownside > 0 ? '+' : ''}{model.upsideDownside.toFixed(1)}%
-                      </p>
-                    </div>
-                  </div>
-                  <Progress value={model.confidence * 100} className="h-1.5 mt-3" />
-                  <p className="text-[10px] text-slate-400 mt-1">مستوى الثقة: {(model.confidence * 100).toFixed(0)}%</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Summary */}
-            <div className="mt-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-xs text-emerald-600">متوسط القيمة العادلة</p>
-                  <p className="text-lg font-bold text-emerald-700">
-                    {formatPrice(results.filter(m => m.fairValue > 0).reduce((s, m) => s + m.fairValue, 0) / results.filter(m => m.fairValue > 0).length)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-emerald-600">متوسط التفوق</p>
-                  <p className="text-lg font-bold text-emerald-700">
-                    {(results.filter(m => m.fairValue > 0).reduce((s, m) => s + m.upsideDownside, 0) / results.filter(m => m.fairValue > 0).length).toFixed(1)}%
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-emerald-600">التوصية</p>
-                  <p className="text-lg font-bold text-emerald-700">
-                    {results.filter(m => m.upsideDownside > 10).length > results.filter(m => m.upsideDownside < -10).length ? 'شراء' :
-                     results.filter(m => m.upsideDownside < -10).length > results.filter(m => m.upsideDownside > 10).length ? 'بيع' : 'احتفاظ'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Info Box */}
-      <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20">
-        <CardContent className="p-4">
-          <div className="flex gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-800 dark:text-amber-200">
-              <p className="font-bold mb-1">نماذج التقييم المستخدمة</p>
-              <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li><strong>DCF</strong> - التدفق النقدي المخصوم: توقع التدفقات النقدية الحرة وخصمها بمعدل WACC</li>
-                <li><strong>DDM</strong> - نموذج توزيعات الأرباح: نموذج جوردون للنمو للأسهم الموزعة</li>
-                <li><strong>Graham</strong> - رقم جراهام: sqrt(15 × EPS × BVPS) معدّل للأسواق الناشئة</li>
-                <li><strong>Relative</strong> - التقييم النسبي: مقارنة م/ر وم/ق بمتوسط القطاع</li>
-                <li><strong>Residual Income</strong> - الدخل المتبقي: القيمة الدفترية + القيمة الحالية للدخل المتبقي</li>
-                <li><strong>EV/EBITDA</strong> - القيمة المؤسسية/الربحية: باستخدام مضاعفات القطاع</li>
-                <li><strong>NAV</strong> - صافي قيمة الأصول: مع تعديل العائد على حقوق الملكية</li>
-                <li><strong>EPV</strong> - قيمة القوة الكسبية: رسملة الأرباح المعيارية</li>
-              </ol>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

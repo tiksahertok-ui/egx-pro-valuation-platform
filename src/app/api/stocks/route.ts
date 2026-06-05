@@ -1,21 +1,24 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabase, type SupabaseStock } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    let stocks;
+    let stocks: SupabaseStock[] = [];
+
     try {
-      stocks = await db.stock.findMany({
-        orderBy: { marketCap: 'desc' },
-        include: {
-          valuationResults: true,
-        },
-      });
-    } catch {
-      stocks = [];
+      const { data, error } = await supabase
+        .from('Stock')
+        .select('*')
+        .order('marketCap', { ascending: false, nullsFirst: false });
+
+      if (!error && data) {
+        stocks = data as SupabaseStock[];
+      }
+    } catch (err) {
+      console.warn('Supabase query failed:', err);
     }
 
     // If no stocks in DB, use master list
@@ -42,7 +45,6 @@ export async function GET() {
         lastPriceAt: null,
         description: s.description,
         descriptionAr: s.descriptionAr,
-        valuationResults: [],
       }));
       return NextResponse.json({ stocks: masterStocks, total: masterStocks.length, source: 'master' });
     }
@@ -73,7 +75,6 @@ export async function GET() {
       lastPriceAt: null,
       description: s.description,
       descriptionAr: s.descriptionAr,
-      valuationResults: [],
     }));
     return NextResponse.json({ stocks: masterStocks, total: masterStocks.length, source: 'master_fallback' });
   }

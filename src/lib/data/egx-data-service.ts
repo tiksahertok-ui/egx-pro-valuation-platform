@@ -1,7 +1,7 @@
 /**
  * EGX Data Service - Comprehensive real-time data fetching and updating system
  * Fetches from Yahoo Finance API (.CA = Cairo exchange), falls back to web search,
- * stores results in database via Prisma.
+ * stores results in Supabase database.
  *
  * Key functions:
  * - fetchStockPrice(yahooSymbol)       → StockPrice | null
@@ -14,7 +14,7 @@
  * - seedAllStocks()                    → SeedResult
  */
 
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { EGX_STOCKS, type EGXStockMaster } from './egx-stocks-master';
 import { needsPriceRefresh, needsFinancialsRefresh } from '@/lib/market-hours';
 
@@ -433,15 +433,21 @@ async function fetchPriceFromWebSearch(ticker: string): Promise<StockPrice | nul
 }
 
 // ============================================================
-// Database Helper Operations
+// Supabase Helper Operations
 // ============================================================
 
 async function ensureStockExists(stock: EGXStockMaster): Promise<string> {
-  const existing = await db.stock.findUnique({ where: { ticker: stock.ticker } });
+  const { data: existing } = await supabase
+    .from('Stock')
+    .select('id')
+    .eq('ticker', stock.ticker)
+    .single();
+
   if (existing) return existing.id;
 
-  const created = await db.stock.create({
-    data: {
+  const { data, error } = await supabase
+    .from('Stock')
+    .insert({
       ticker: stock.ticker,
       name: stock.name,
       nameAr: stock.nameAr,
@@ -451,10 +457,22 @@ async function ensureStockExists(stock: EGXStockMaster): Promise<string> {
       yahooSymbol: stock.yahooSymbol,
       description: stock.description,
       descriptionAr: stock.descriptionAr,
-    },
-  });
+    })
+    .select('id')
+    .single();
 
-  return created.id;
+  if (error) {
+    console.error(`[DataService] Error creating stock ${stock.ticker}:`, error.message);
+    // Try to get existing again (race condition)
+    const { data: retry } = await supabase
+      .from('Stock')
+      .select('id')
+      .eq('ticker', stock.ticker)
+      .single();
+    return retry?.id || stock.ticker;
+  }
+
+  return data?.id || stock.ticker;
 }
 
 async function updateStockPriceInDb(stockId: string, price: StockPrice, financials?: FinancialData): Promise<void> {
@@ -485,10 +503,17 @@ async function updateStockPriceInDb(stockId: string, price: StockPrice, financia
     updateData.peRatio = price.price / financials.eps;
   }
 
-  updateData.lastPriceAt = new Date();
+  updateData.lastPriceAt = new Date().toISOString();
 
   if (Object.keys(updateData).length > 1) {
-    await db.stock.update({ where: { id: stockId }, data: updateData });
+    const { error } = await supabase
+      .from('Stock')
+      .update(updateData)
+      .eq('id', stockId);
+
+    if (error) {
+      console.error(`[DataService] Error updating stock ${stockId}:`, error.message);
+    }
   }
 }
 
@@ -505,10 +530,17 @@ async function updateStockFinancialsInDb(stockId: string, data: FinancialData): 
   if (data.dividendYield > 0) updateData.dividendYield = data.dividendYield * 100;
   if (data.price > 0) updateData.price = data.price;
 
-  updateData.lastFinancialsAt = new Date();
+  updateData.lastFinancialsAt = new Date().toISOString();
 
   if (Object.keys(updateData).length > 1) {
-    await db.stock.update({ where: { id: stockId }, data: updateData });
+    const { error } = await supabase
+      .from('Stock')
+      .update(updateData)
+      .eq('id', stockId);
+
+    if (error) {
+      console.error(`[DataService] Error updating financials for ${stockId}:`, error.message);
+    }
   }
 }
 
@@ -519,28 +551,44 @@ async function storePriceHistory(stockId: string, history: PriceHistoryPoint[]):
     try {
       const dateOnly = new Date(point.date);
       dateOnly.setHours(0, 0, 0, 0);
+      const dateStr = dateOnly.toISOString().split('T')[0];
 
-      await db.priceHistory.upsert({
-        where: { stockId_date: { stockId, date: dateOnly } },
-        create: {
-          stockId,
-          date: dateOnly,
-          open: point.open,
-          high: point.high,
-          low: point.low,
-          close: point.close,
-          volume: point.volume,
-          adjClose: point.adjClose,
-        },
-        update: {
-          open: point.open,
-          high: point.high,
-          low: point.low,
-          close: point.close,
-          volume: point.volume,
-          adjClose: point.adjClose,
-        },
-      });
+      // Check if entry exists
+      const { data: existing } = await supabase
+        .from('PriceHistory')
+        .select('id')
+        .eq('stockId', stockId)
+        .eq('date', dateStr)
+        .single();
+
+      if (existing) {
+        // Update
+        await supabase
+          .from('PriceHistory')
+          .update({
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+            volume: point.volume,
+            adjClose: point.adjClose,
+          })
+          .eq('id', existing.id);
+      } else {
+        // Insert
+        await supabase
+          .from('PriceHistory')
+          .insert({
+            stockId,
+            date: dateStr,
+            open: point.open,
+            high: point.high,
+            low: point.low,
+            close: point.close,
+            volume: point.volume,
+            adjClose: point.adjClose,
+          });
+      }
       stored++;
     } catch {
       // Skip duplicates / invalid entries
@@ -580,7 +628,7 @@ export async function fetchStockPrice(yahooSymbol: string): Promise<StockPrice |
   // Cache the result
   setCachedPrice(yahooSymbol, data);
 
-  // Store in database
+  // Store in Supabase
   try {
     const stock = EGX_STOCKS.find(s => s.ticker === ticker);
     if (stock) {
@@ -658,7 +706,7 @@ export async function fetchFinancialData(yahooSymbol: string): Promise<Financial
 
   if (!data) return null;
 
-  // Store in database
+  // Store in Supabase
   try {
     const stock = EGX_STOCKS.find(s => s.ticker === ticker);
     if (stock) {
@@ -769,11 +817,13 @@ export async function refreshAllFinancials(
   const staleStocks: EGXStockMaster[] = [];
   for (const stock of stocks) {
     try {
-      const existing = await db.stock.findUnique({
-        where: { ticker: stock.ticker },
-        select: { lastFinancialsAt: true },
-      });
-      if (needsFinancialsRefresh(existing?.lastFinancialsAt ?? null)) {
+      const { data: existing } = await supabase
+        .from('Stock')
+        .select('lastFinancialsAt')
+        .eq('ticker', stock.ticker)
+        .single();
+
+      if (needsFinancialsRefresh(existing?.lastFinancialsAt ? new Date(existing.lastFinancialsAt) : null)) {
         staleStocks.push(stock);
       }
     } catch {
@@ -820,11 +870,13 @@ export async function refreshStalePrices(
   const staleStocks: EGXStockMaster[] = [];
   for (const stock of EGX_STOCKS) {
     try {
-      const existing = await db.stock.findUnique({
-        where: { ticker: stock.ticker },
-        select: { lastPriceAt: true },
-      });
-      if (needsPriceRefresh(existing?.lastPriceAt ?? null)) {
+      const { data: existing } = await supabase
+        .from('Stock')
+        .select('lastPriceAt')
+        .eq('ticker', stock.ticker)
+        .single();
+
+      if (needsPriceRefresh(existing?.lastPriceAt ? new Date(existing.lastPriceAt) : null)) {
         staleStocks.push(stock);
       }
     } catch {
@@ -928,22 +980,24 @@ export async function fetchAllPriceHistory(
 export async function computeTechnicalIndicators(ticker: string): Promise<void> {
   const { computeAndStoreIndicators } = await import('./technical-computer');
 
-  const stock = await db.stock.findUnique({
-    where: { ticker },
-    select: { id: true },
-  });
+  const { data: stock } = await supabase
+    .from('Stock')
+    .select('id')
+    .eq('ticker', ticker)
+    .single();
 
   if (!stock) {
     console.warn(`[DataService] Stock ${ticker} not found in DB for technical computation`);
     return;
   }
 
-  const historyCount = await db.priceHistory.count({
-    where: { stockId: stock.id },
-  });
+  const { count } = await supabase
+    .from('PriceHistory')
+    .select('*', { count: 'exact', head: true })
+    .eq('stockId', stock.id);
 
-  if (historyCount < 20) {
-    console.warn(`[DataService] ${ticker}: Only ${historyCount} price history points, need at least 20`);
+  if (!count || count < 20) {
+    console.warn(`[DataService] ${ticker}: Only ${count || 0} price history points, need at least 20`);
     return;
   }
 
@@ -959,31 +1013,34 @@ export async function computeTechnicalIndicators(ticker: string): Promise<void> 
  * Recompute all sector statistics
  */
 export async function recomputeSectorStats(): Promise<void> {
-  const { getAllSectors, getSectorNameAr } = await import('./egx-stocks-master');
+  const { getAllSectors } = await import('./egx-stocks-master');
   const sectors = getAllSectors();
 
   for (const sector of sectors) {
-    const sectorAr = getSectorNameAr(sector);
+    const { data: stocks } = await supabase
+      .from('Stock')
+      .select('ticker, marketCap, peRatio, pbRatio, eps, bookValuePerShare, dividendYield')
+      .eq('sector', sector)
+      .gt('price', 0);
 
-    const stocks = await db.stock.findMany({
-      where: { sector, price: { gt: 0 } },
-      select: {
-        ticker: true,
-        marketCap: true,
-        peRatio: true,
-        pbRatio: true,
-        eps: true,
-        bookValuePerShare: true,
-        dividendYield: true,
-      },
-    });
+    if (!stocks || stocks.length === 0) {
+      // Upsert empty sector stats
+      const { data: existing } = await supabase
+        .from('SectorStats')
+        .select('id')
+        .eq('sector', sector)
+        .single();
 
-    if (stocks.length === 0) {
-      await db.sectorStats.upsert({
-        where: { sector },
-        create: { sector, sectorAr, stockCount: 0 },
-        update: { sectorAr, stockCount: 0, totalMarketCap: 0 },
-      });
+      if (existing) {
+        await supabase
+          .from('SectorStats')
+          .update({ stockCount: 0, totalMarketCap: 0 })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('SectorStats')
+          .insert({ sector, stockCount: 0, totalMarketCap: 0 });
+      }
       continue;
     }
 
@@ -1023,34 +1080,35 @@ export async function recomputeSectorStats(): Promise<void> {
       ? stocksWitROE.reduce((sum, s) => sum + (s.eps / s.bookValuePerShare) * 100, 0) / stocksWitROE.length
       : 0;
 
-    await db.sectorStats.upsert({
-      where: { sector },
-      create: {
-        sector,
-        sectorAr,
-        stockCount: stocks.length,
-        totalMarketCap,
-        avgPE,
-        avgPB,
-        avgROE,
-        avgROA: avgROE * 0.4,
-        weightedPE,
-        weightedPB,
-        avgDividendYield,
-      },
-      update: {
-        sectorAr,
-        stockCount: stocks.length,
-        totalMarketCap,
-        avgPE,
-        avgPB,
-        avgROE,
-        avgROA: avgROE * 0.4,
-        weightedPE,
-        weightedPB,
-        avgDividendYield,
-      },
-    });
+    // Upsert sector stats
+    const { data: existing } = await supabase
+      .from('SectorStats')
+      .select('id')
+      .eq('sector', sector)
+      .single();
+
+    const statsData = {
+      stockCount: stocks.length,
+      totalMarketCap,
+      avgPE,
+      avgPB,
+      avgROE,
+      avgROA: avgROE * 0.4,
+      weightedPE,
+      weightedPB,
+      avgDividendYield,
+    };
+
+    if (existing) {
+      await supabase
+        .from('SectorStats')
+        .update(statsData)
+        .eq('id', existing.id);
+    } else {
+      await supabase
+        .from('SectorStats')
+        .insert({ sector, ...statsData });
+    }
   }
 }
 
@@ -1059,7 +1117,7 @@ export async function recomputeSectorStats(): Promise<void> {
 // ============================================================
 
 /**
- * Seed all stocks to database from the master list
+ * Seed all stocks to Supabase from the master list
  */
 export async function seedAllStocks(): Promise<SeedResult> {
   let created = 0;
@@ -1068,29 +1126,34 @@ export async function seedAllStocks(): Promise<SeedResult> {
 
   for (const stock of EGX_STOCKS) {
     try {
-      const existing = await db.stock.findUnique({ where: { ticker: stock.ticker } });
+      const { data: existing } = await supabase
+        .from('Stock')
+        .select('id, name, sector, industry')
+        .eq('ticker', stock.ticker)
+        .single();
 
       if (existing) {
         if (existing.name !== stock.name || existing.sector !== stock.sector || existing.industry !== stock.industry) {
-          await db.stock.update({
-            where: { ticker: stock.ticker },
-            data: {
+          await supabase
+            .from('Stock')
+            .update({
               name: stock.name,
               nameAr: stock.nameAr,
               sector: stock.sector,
               industry: stock.industry,
               yahooSymbol: stock.yahooSymbol,
-              description: stock.description || existing.description,
-              descriptionAr: stock.descriptionAr || existing.descriptionAr,
-            },
-          });
+              description: stock.description,
+              descriptionAr: stock.descriptionAr,
+            })
+            .eq('id', existing.id);
           updated++;
         } else {
           skipped++;
         }
       } else {
-        await db.stock.create({
-          data: {
+        await supabase
+          .from('Stock')
+          .insert({
             ticker: stock.ticker,
             name: stock.name,
             nameAr: stock.nameAr,
@@ -1100,8 +1163,7 @@ export async function seedAllStocks(): Promise<SeedResult> {
             yahooSymbol: stock.yahooSymbol,
             description: stock.description,
             descriptionAr: stock.descriptionAr,
-          },
-        });
+          });
         created++;
       }
     } catch (error) {

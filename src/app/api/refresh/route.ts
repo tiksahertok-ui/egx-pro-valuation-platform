@@ -1,33 +1,46 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    // Step 1: Seed stocks to DB
+    // Step 1: Seed stocks to Supabase
     let created = 0;
     let updated = 0;
     let skipped = 0;
 
     for (const stock of EGX_STOCKS) {
       try {
-        const existing = await db.stock.findUnique({ where: { ticker: stock.ticker } });
+        // Check if stock exists
+        const { data: existing } = await supabase
+          .from('Stock')
+          .select('id, ticker')
+          .eq('ticker', stock.ticker)
+          .single();
+
         if (!existing) {
-          await db.stock.create({
-            data: {
+          const { error } = await supabase
+            .from('Stock')
+            .insert({
               ticker: stock.ticker,
               name: stock.name,
               nameAr: stock.nameAr,
               sector: stock.sector,
               industry: stock.industry,
+              isin: '',
               yahooSymbol: stock.yahooSymbol,
               description: stock.description,
               descriptionAr: stock.descriptionAr,
-            },
-          });
-          created++;
+            });
+
+          if (!error) {
+            created++;
+          } else {
+            console.warn(`Failed to create ${stock.ticker}:`, error.message);
+            skipped++;
+          }
         } else {
           skipped++;
         }
@@ -44,10 +57,16 @@ export async function POST() {
 
     for (const ticker of topTickers) {
       try {
-        const stock = await db.stock.findUnique({ where: { ticker } });
-        if (!stock || !stock.yahooSymbol) continue;
+        // Get stock from Supabase to find yahooSymbol
+        const { data: stockData } = await supabase
+          .from('Stock')
+          .select('id, yahooSymbol, fiftyTwoWeekHigh, fiftyTwoWeekLow')
+          .eq('ticker', ticker)
+          .single();
 
-        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stock.yahooSymbol)}?range=1d&interval=1d`;
+        if (!stockData?.yahooSymbol) continue;
+
+        const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(stockData.yahooSymbol)}?range=1d&interval=1d`;
         const response = await fetch(yahooUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -60,15 +79,18 @@ export async function POST() {
           const json = await response.json();
           const meta = json?.chart?.result?.[0]?.meta;
           if (meta?.regularMarketPrice) {
-            await db.stock.update({
-              where: { ticker },
-              data: {
-                price: meta.regularMarketPrice,
-                fiftyTwoWeekHigh: meta.fiftyTwoWeekHigh || stock.fiftyTwoWeekHigh,
-                fiftyTwoWeekLow: meta.fiftyTwoWeekLow || stock.fiftyTwoWeekLow,
-                lastPriceAt: new Date(),
-              },
-            });
+            const updateData: Record<string, unknown> = {
+              price: meta.regularMarketPrice,
+              lastPriceAt: new Date().toISOString(),
+            };
+            if (meta.fiftyTwoWeekHigh) updateData.fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh;
+            if (meta.fiftyTwoWeekLow) updateData.fiftyTwoWeekLow = meta.fiftyTwoWeekLow;
+
+            await supabase
+              .from('Stock')
+              .update(updateData)
+              .eq('ticker', ticker);
+
             pricesRefreshed++;
           } else {
             pricesFailed++;
@@ -86,17 +108,21 @@ export async function POST() {
 
     // Step 3: Update market params
     try {
-      await db.marketParams.upsert({
-        where: { id: 'default' },
-        create: {
+      const { data: existingParams } = await supabase
+        .from('MarketParams')
+        .select('id')
+        .eq('id', 'default')
+        .single();
+
+      if (!existingParams) {
+        await supabase.from('MarketParams').insert({
           id: 'default',
           riskFreeRate: 0.18,
           equityRiskPremium: 0.08,
           inflationRate: 0.30,
           gdpGrowthRate: 0.05,
-        },
-        update: {},
-      });
+        });
+      }
     } catch {
       // Ignore
     }

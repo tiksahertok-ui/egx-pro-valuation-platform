@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { Providers } from "@/lib/providers";
+import { ThemeProvider } from "next-themes";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "EGX Pro - منصة تقييم الأسهم المصرية",
-  description: "منصة مؤسسية لتقييم الأسهم المصرية بجميع بورصة مصر مع نماذج التقييم الثمانية",
+  title: "EGX Pro - Egyptian Stock Valuation Platform",
+  description: "Institutional-grade Egyptian Exchange stock valuation platform with 8 valuation models",
   icons: {
     icon: "/logo.svg",
   },
@@ -28,14 +29,21 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <Providers>
-          {children}
-          <Toaster />
-        </Providers>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <Providers>
+            {children}
+            <Toaster />
+          </Providers>
+        </ThemeProvider>
       </body>
     </html>
   );

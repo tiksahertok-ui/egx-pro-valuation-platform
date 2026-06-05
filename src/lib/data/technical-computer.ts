@@ -2,9 +2,10 @@
  * Technical Indicators Computer
  * Computes RSI, MACD, Bollinger Bands, SMA, EMA, ATR, ADX, Stochastic, Williams %R, CCI, OBV
  * from raw price history data and stores results in the TechnicalIndicator table
+ * Uses Supabase client instead of Prisma
  */
 
-import { db } from '@/lib/db';
+import { supabase } from '@/lib/supabase';
 
 // ============================================================
 // Input/Output Types
@@ -150,7 +151,6 @@ export function computeRSI(closes: number[], period: number = 14): (number | nul
       continue;
     }
 
-    // Use Wilder's smoothing method
     if (i === period) {
       let avgGain = 0;
       let avgLoss = 0;
@@ -168,14 +168,6 @@ export function computeRSI(closes: number[], period: number = 14): (number | nul
         result.push(100 - 100 / (1 + rs));
       }
     } else {
-      const prevRSI = result[i - 1];
-      if (prevRSI === null) {
-        result.push(null);
-        continue;
-      }
-
-      // Recompute from the previous avgGain/avgLoss
-      // Simplified: use direct calculation
       let sumGain = 0;
       let sumLoss = 0;
       for (let j = i - period + 1; j <= i; j++) {
@@ -211,7 +203,6 @@ export function computeMACD(
   const emaFast = computeEMA(closes, fastPeriod);
   const emaSlow = computeEMA(closes, slowPeriod);
 
-  // MACD Line = EMA(12) - EMA(26)
   const macdLine: (number | null)[] = [];
   for (let i = 0; i < closes.length; i++) {
     if (emaFast[i] !== null && emaSlow[i] !== null) {
@@ -221,14 +212,12 @@ export function computeMACD(
     }
   }
 
-  // Signal Line = EMA(9) of MACD Line
   const macdValues = macdLine.map(v => v ?? NaN);
   const signalLine = computeEMA(
     macdValues.map(v => (isNaN(v) ? NaN : v)),
     signalPeriod
   );
 
-  // Histogram = MACD - Signal
   const histogram: (number | null)[] = [];
   for (let i = 0; i < closes.length; i++) {
     if (macdLine[i] !== null && signalLine[i] !== null) {
@@ -261,7 +250,6 @@ export function computeBollingerBands(
       continue;
     }
 
-    // Calculate standard deviation
     let sumSquaredDiff = 0;
     let count = 0;
     for (let j = i - period + 1; j <= i; j++) {
@@ -309,7 +297,6 @@ export function computeATR(
     trueRanges.push(Math.max(hl, hc, lc));
   }
 
-  // Use Wilder's smoothing
   const result: (number | null)[] = [];
   let atr: number | null = null;
 
@@ -369,7 +356,6 @@ export function computeADX(
     tr.push(Math.max(hl, hc, lc));
   }
 
-  // Smoothed values
   const smoothedPlusDM: number[] = [];
   const smoothedMinusDM: number[] = [];
   const smoothedTR: number[] = [];
@@ -399,7 +385,6 @@ export function computeADX(
     }
   }
 
-  // +DI and -DI
   const plusDI: number[] = [];
   const minusDI: number[] = [];
   const dx: number[] = [];
@@ -418,7 +403,6 @@ export function computeADX(
     }
   }
 
-  // ADX = smoothed DX
   const result: (number | null)[] = [];
   let adx: number | null = null;
 
@@ -438,7 +422,7 @@ export function computeADX(
       adx = (adx * (period - 1) + dx[i]) / period;
     }
 
-    result.push(adx);
+    result.push(atr !== null ? adx : null);
   }
 
   return result;
@@ -478,7 +462,6 @@ export function computeStochastic(
     }
   }
 
-  // %D = SMA of %K
   const kValues = rawK.map(v => v ?? NaN);
   const d = computeSMA(
     kValues.map(v => (isNaN(v) ? NaN : v)),
@@ -549,7 +532,6 @@ export function computeCCI(
       continue;
     }
 
-    // Mean deviation
     let sumDev = 0;
     let count = 0;
     for (let j = i - period + 1; j <= i; j++) {
@@ -602,7 +584,6 @@ export function computeAllIndicators(bars: PriceBar[]): TechnicalIndicators[] {
   const lows = bars.map(b => b.low);
   const volumes = bars.map(b => b.volume);
 
-  // Compute all indicators
   const rsi = computeRSI(closes, 14);
   const macd = computeMACD(closes, 12, 26, 9);
   const bb = computeBollingerBands(closes, 20, 2);
@@ -618,7 +599,6 @@ export function computeAllIndicators(bars: PriceBar[]): TechnicalIndicators[] {
   const cci = computeCCI(highs, lows, closes, 14);
   const obv = computeOBV(closes, volumes);
 
-  // Build results array
   const results: TechnicalIndicators[] = [];
 
   for (let i = 0; i < bars.length; i++) {
@@ -650,24 +630,25 @@ export function computeAllIndicators(bars: PriceBar[]): TechnicalIndicators[] {
 }
 
 // ============================================================
-// Database Operations
+// Supabase Operations
 // ============================================================
 
 /**
  * Compute and store technical indicators for a single stock
  */
 export async function computeAndStoreIndicators(stockId: string): Promise<number> {
-  // Fetch price history from database
-  const priceHistory = await db.priceHistory.findMany({
-    where: { stockId },
-    orderBy: { date: 'asc' },
-  });
+  // Fetch price history from Supabase
+  const { data: priceHistory, error } = await supabase
+    .from('PriceHistory')
+    .select('*')
+    .eq('stockId', stockId)
+    .order('date', { ascending: true });
 
-  if (priceHistory.length === 0) return 0;
+  if (error || !priceHistory || priceHistory.length === 0) return 0;
 
   // Convert to PriceBar format
   const bars: PriceBar[] = priceHistory.map(p => ({
-    date: p.date,
+    date: new Date(p.date),
     open: p.open,
     high: p.high,
     low: p.low,
@@ -679,68 +660,58 @@ export async function computeAndStoreIndicators(stockId: string): Promise<number
   // Compute all indicators
   const indicators = computeAllIndicators(bars);
 
-  // Store in database (only store the most recent indicators to avoid excessive data)
-  // We store the last 252 trading days (1 year) of indicators
+  // Store the most recent 252 trading days
   const recentIndicators = indicators.slice(-252);
   let stored = 0;
 
   for (const ind of recentIndicators) {
     const dateOnly = new Date(ind.date);
     dateOnly.setHours(0, 0, 0, 0);
+    const dateStr = dateOnly.toISOString().split('T')[0];
 
     try {
-      await db.technicalIndicator.upsert({
-        where: {
-          stockId_date: {
-            stockId,
-            date: dateOnly,
-          },
-        },
-        create: {
-          stockId,
-          date: dateOnly,
-          rsi14: ind.rsi14,
-          macdLine: ind.macdLine,
-          macdSignal: ind.macdSignal,
-          macdHist: ind.macdHist,
-          bbUpper: ind.bbUpper,
-          bbMiddle: ind.bbMiddle,
-          bbLower: ind.bbLower,
-          sma20: ind.sma20,
-          sma50: ind.sma50,
-          sma200: ind.sma200,
-          ema12: ind.ema12,
-          ema26: ind.ema26,
-          atr14: ind.atr14,
-          adx14: ind.adx14,
-          stochasticK: ind.stochasticK,
-          stochasticD: ind.stochasticD,
-          williamsR: ind.williamsR,
-          cci14: ind.cci14,
-          obv: ind.obv,
-        },
-        update: {
-          rsi14: ind.rsi14,
-          macdLine: ind.macdLine,
-          macdSignal: ind.macdSignal,
-          macdHist: ind.macdHist,
-          bbUpper: ind.bbUpper,
-          bbMiddle: ind.bbMiddle,
-          bbLower: ind.bbLower,
-          sma20: ind.sma20,
-          sma50: ind.sma50,
-          sma200: ind.sma200,
-          ema12: ind.ema12,
-          ema26: ind.ema26,
-          atr14: ind.atr14,
-          adx14: ind.adx14,
-          stochasticK: ind.stochasticK,
-          stochasticD: ind.stochasticD,
-          williamsR: ind.williamsR,
-          cci14: ind.cci14,
-          obv: ind.obv,
-        },
-      });
+      // Check if exists
+      const { data: existing } = await supabase
+        .from('TechnicalIndicator')
+        .select('id')
+        .eq('stockId', stockId)
+        .eq('date', dateStr)
+        .single();
+
+      const indicatorData = {
+        stockId,
+        date: dateStr,
+        rsi14: ind.rsi14,
+        macdLine: ind.macdLine,
+        macdSignal: ind.macdSignal,
+        macdHist: ind.macdHist,
+        bbUpper: ind.bbUpper,
+        bbMiddle: ind.bbMiddle,
+        bbLower: ind.bbLower,
+        sma20: ind.sma20,
+        sma50: ind.sma50,
+        sma200: ind.sma200,
+        ema12: ind.ema12,
+        ema26: ind.ema26,
+        atr14: ind.atr14,
+        adx14: ind.adx14,
+        stochasticK: ind.stochasticK,
+        stochasticD: ind.stochasticD,
+        williamsR: ind.williamsR,
+        cci14: ind.cci14,
+        obv: ind.obv,
+      };
+
+      if (existing) {
+        await supabase
+          .from('TechnicalIndicator')
+          .update(indicatorData)
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('TechnicalIndicator')
+          .insert(indicatorData);
+      }
       stored++;
     } catch (error) {
       console.warn(`[TechnicalComputer] Error storing indicator: ${(error as Error).message}`);
@@ -756,25 +727,26 @@ export async function computeAndStoreIndicators(stockId: string): Promise<number
 export async function computeAllStocksIndicators(
   onProgress?: (completed: number, total: number) => void
 ): Promise<{ total: number; computed: number; skipped: number; errors: string[] }> {
-  const stocks = await db.stock.findMany({
-    select: { id: true, ticker: true },
-  });
+  const { data: stocks } = await supabase
+    .from('Stock')
+    .select('id, ticker');
 
   let computed = 0;
   let skipped = 0;
   const errors: string[] = [];
 
+  if (!stocks) return { total: 0, computed: 0, skipped: 0, errors: ['No stocks found'] };
+
   for (let i = 0; i < stocks.length; i++) {
     const stock = stocks[i];
 
     try {
-      // Check if there's price history
-      const historyCount = await db.priceHistory.count({
-        where: { stockId: stock.id },
-      });
+      const { count } = await supabase
+        .from('PriceHistory')
+        .select('*', { count: 'exact', head: true })
+        .eq('stockId', stock.id);
 
-      if (historyCount < 20) {
-        // Need at least 20 data points for meaningful indicators
+      if (!count || count < 20) {
         skipped++;
         continue;
       }

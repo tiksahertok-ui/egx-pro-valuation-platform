@@ -1,25 +1,30 @@
 ---
-Task ID: 3
-Agent: Main Agent
-Task: Build comprehensive EGX stock data system with all Egyptian stocks, real-time data, and accurate valuations
+Task ID: 1
+Agent: full-stack-developer
+Task: Rebuild EGX valuation platform with Supabase, English UI, dark mode, auto fair value
 
 Work Log:
-- Searched multiple data sources for EGX stocks (Yahoo Finance, TradingView, EODHD, african-markets.com)
-- Confirmed Yahoo Finance supports EGX stocks with .CA suffix (Cairo exchange)
-- Built complete master list of 207 EGX stocks across 20 sectors with Arabic names
-- Created real-time data fetching service with Yahoo Finance API + web search fallback
-- Implemented rate limiting (200ms between requests) and price caching (5-min TTL)
-- Added technical indicators computer (RSI, MACD, BB, SMA, EMA, ATR, ADX, Stochastic, etc.)
-- Built data refresh cron endpoint with scope parameter (prices/financials/all/technical)
-- Added sector statistics auto-recomputation with market-cap weighted averages
-- Created seed endpoint for populating all 207 stocks
-- Build passes successfully
-- Pushed to GitHub
+- Installed @supabase/supabase-js package
+- Created /src/lib/supabase.ts with Supabase client configuration using service role key
+- Updated .env with correct NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+- Rewrote /src/app/layout.tsx: changed lang="ar" dir="rtl" to lang="en", added ThemeProvider from next-themes
+- Rewrote /src/app/api/stocks/route.ts: replaced Prisma db calls with Supabase client queries, kept master list fallback
+- Rewrote /src/app/api/stocks/[ticker]/route.ts: replaced Prisma with Supabase, fetches financial data, price history, technical indicators, sector stats, runs auto valuation with runAllModels()
+- Rewrote /src/app/api/sectors/route.ts: replaced Prisma with Supabase, computes from stocks when SectorStats empty
+- Rewrote /src/app/api/refresh/route.ts: replaced Prisma with Supabase for seeding and price refresh from Yahoo Finance
+- Rewrote /src/lib/data/egx-data-service.ts: replaced all db.* calls with supabase.from() queries for Stock, PriceHistory, SectorStats tables
+- Rewrote /src/lib/data/technical-computer.ts: replaced Prisma db calls with Supabase queries for PriceHistory and TechnicalIndicator
+- Completely rewrote /src/app/page.tsx: English language, 3 tabs (Dashboard, Stocks, Sectors - NO Calculator), dark mode support, auto fair value display in stock detail dialog, emerald/green accent color, ThemeToggle component
+- Fixed ESLint errors: removed SortIcon component created during render, replaced with inline JSX
+- Removed unused API routes (api/data/refresh, api/seed, api/route)
+- All lint checks pass successfully
+- Dev server running and /api/stocks endpoint returning data correctly
 
 Stage Summary:
-- 207 EGX stocks across 20 sectors (Banking, Real Estate, Financial Services, Telecommunications, Food & Beverages, Construction, Energy, Chemicals, Tobacco, Technology, Tourism, Healthcare, Textiles, Mining, Insurance, Investment, Transport, Media, Automotive, Paper & Packaging)
-- Real-time data fetching via Yahoo Finance (.CA) with z-ai-web-dev-sdk web search fallback
-- Technical indicators auto-computation from price history
-- Sector stats auto-recomputation with market-cap weighted PE, PB, ROE
-- API endpoint: GET /api/data/refresh?scope=prices|financials|all|technical
-- API endpoint: POST /api/seed (seed all 207 stocks)
+- **Architecture**: Migrated from Prisma/SQLite to Supabase JS client for all database operations, enabling Vercel serverless deployment
+- **Language**: Changed entire UI from Arabic (RTL) to English (LTR)
+- **Dark Mode**: Added next-themes ThemeProvider with sun/moon toggle in header
+- **Calculator Tab Removed**: Replaced with auto-calculated fair value in stock detail dialog showing all 8 valuation models
+- **Auto Fair Value**: When viewing a stock, runAllModels() is called automatically and results are prominently displayed with average/median fair value, upside/downside %, and overall verdict
+- **Key Files Modified**: supabase.ts (new), layout.tsx, page.tsx, 4 API routes, egx-data-service.ts, technical-computer.ts, .env
+- **Key Files Preserved**: egx-stocks-master.ts, valuation-engine.ts, market-hours.ts, all ui components
