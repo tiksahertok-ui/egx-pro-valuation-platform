@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase, type SupabaseStock, type SupabaseFinancialData, type SupabasePriceHistory, type SupabaseSectorStats } from '@/lib/supabase';
+import { supabase, type SupabaseStock, type SupabaseFinancialData, type SupabasePriceHistory, type SupabaseTechnicalIndicator, type SupabaseSectorStats } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
 import { runAllModels, type StockFundamentals, type SectorAverages, DEFAULT_MARKET_PARAMS } from '@/lib/valuation-engine';
 
@@ -32,22 +32,39 @@ function mapTechnicalIndicator(ti: Record<string, unknown>) {
   };
 }
 
-// Safe Supabase query wrapper - always returns data or null, never throws
-async function safeQuery<T>(
-  queryFn: () => Promise<{ data: T | null; error: { message: string; code: string } | null }>,
-  label: string
-): Promise<T | null> {
-  try {
-    const { data, error } = await queryFn();
-    if (error) {
-      console.warn(`[stocks/[ticker]] ${label} query error:`, error.message, error.code);
-      return null;
-    }
-    return data;
-  } catch (err) {
-    console.warn(`[stocks/[ticker]] ${label} query exception:`, err);
-    return null;
-  }
+// Helper: build a default stock object from master list entry
+function buildDefaultStock(masterStock: typeof EGX_STOCKS[number]): SupabaseStock {
+  return {
+    id: `stock_${masterStock.ticker.toLowerCase()}`,
+    ticker: masterStock.ticker,
+    name: masterStock.name,
+    nameAr: masterStock.nameAr,
+    sector: masterStock.sector,
+    industry: masterStock.industry,
+    marketCap: 0,
+    price: 0,
+    sharesOutstanding: 0,
+    beta: 1.0,
+    egx30Beta: 0,
+    dividendYield: 0,
+    peRatio: 0,
+    pbRatio: 0,
+    eps: 0,
+    bookValuePerShare: 0,
+    fiftyTwoWeekHigh: 0,
+    fiftyTwoWeekLow: 0,
+    avgVolume: 0,
+    exchange: 'EGX',
+    currency: 'EGP',
+    listedDate: null,
+    description: masterStock.description,
+    descriptionAr: masterStock.descriptionAr,
+    logo: null,
+    lastPriceAt: null,
+    lastFinancialsAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function GET(
@@ -57,152 +74,117 @@ export async function GET(
   const { ticker } = await params;
 
   try {
-    // ============================================================
-    // 1. Get stock from Supabase or fall back to master list
-    // ============================================================
+    // Get stock from Supabase
     let stock: SupabaseStock | null = null;
 
-    const dbStock = await safeQuery<SupabaseStock>(
-      () => supabase
+    try {
+      const { data, error } = await supabase
         .from('Stock')
         .select('*')
         .eq('ticker', ticker.toUpperCase())
-        .single(),
-      'Stock'
-    );
+        .single();
 
-    if (dbStock) {
-      stock = dbStock;
+      if (!error && data) {
+        stock = data as SupabaseStock;
+      }
+    } catch (err) {
+      console.warn('Supabase stock query failed:', err);
     }
 
     // Fallback to master list if not found in DB
     if (!stock) {
       const masterStock = EGX_STOCKS.find(s => s.ticker === ticker.toUpperCase());
       if (!masterStock) {
-        return NextResponse.json({
-          stock: null,
-          valuation: null,
-          sectorAvg: { avgPE: 0, avgPB: 0, avgROE: 0, avgEVEbitda: 0 },
-          error: 'Stock not found',
-        }, { status: 200 }); // Return 200 with null data so frontend doesn't crash
+        return NextResponse.json({ error: 'Stock not found' }, { status: 404 });
       }
-      stock = {
-        id: `stock_${masterStock.ticker.toLowerCase()}`,
-        ticker: masterStock.ticker,
-        name: masterStock.name,
-        nameAr: masterStock.nameAr,
-        sector: masterStock.sector,
-        industry: masterStock.industry,
-        marketCap: 0,
-        price: 0,
-        sharesOutstanding: 0,
-        beta: 1.0,
-        egx30Beta: 0,
-        dividendYield: 0,
-        peRatio: 0,
-        pbRatio: 0,
-        eps: 0,
-        bookValuePerShare: 0,
-        fiftyTwoWeekHigh: 0,
-        fiftyTwoWeekLow: 0,
-        avgVolume: 0,
-        exchange: 'EGX',
-        currency: 'EGP',
-        listedDate: null,
-        description: masterStock.description,
-        descriptionAr: masterStock.descriptionAr,
-        logo: null,
-        lastPriceAt: null,
-        lastFinancialsAt: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      stock = buildDefaultStock(masterStock);
     }
 
-    // ============================================================
-    // 2. Get financial data
-    // ============================================================
+    // Get financial data - only if stock has a real DB id (not the fallback id)
     let financialData: SupabaseFinancialData[] = [];
-    const dbFinancials = await safeQuery<SupabaseFinancialData[]>(
-      () => supabase
+    try {
+      const { data, error } = await supabase
         .from('FinancialData')
         .select('*')
-        .eq('stockId', stock!.id)
+        .eq('stockId', stock.id)
         .order('year', { ascending: false })
-        .limit(5),
-      'FinancialData'
-    );
-    if (dbFinancials && dbFinancials.length > 0) {
-      financialData = dbFinancials;
+        .limit(5);
+
+      if (!error && data) {
+        financialData = data as SupabaseFinancialData[];
+      }
+    } catch (err) {
+      console.warn('Supabase financial data query failed:', err);
     }
 
-    // ============================================================
-    // 3. Get price history
-    // ============================================================
+    // Get price history
     let priceHistory: SupabasePriceHistory[] = [];
-    const dbPrices = await safeQuery<SupabasePriceHistory[]>(
-      () => supabase
+    try {
+      const { data, error } = await supabase
         .from('PriceHistory')
         .select('*')
-        .eq('stockId', stock!.id)
+        .eq('stockId', stock.id)
         .order('date', { ascending: false })
-        .limit(365),
-      'PriceHistory'
-    );
-    if (dbPrices && dbPrices.length > 0) {
-      priceHistory = dbPrices;
+        .limit(365);
+
+      if (!error && data) {
+        priceHistory = data as SupabasePriceHistory[];
+      }
+    } catch (err) {
+      console.warn('Supabase price history query failed:', err);
     }
 
-    // ============================================================
-    // 4. Get technical indicators
-    // ============================================================
+    // Get technical indicators
     let technicalIndicators: Array<Record<string, unknown>> = [];
-    const dbTech = await safeQuery<Array<Record<string, unknown>>>(
-      () => supabase
+    try {
+      const { data, error } = await supabase
         .from('TechnicalIndicator')
         .select('*')
-        .eq('stockId', stock!.id)
+        .eq('stockId', stock.id)
         .order('date', { ascending: false })
-        .limit(30) as unknown as Promise<{ data: Array<Record<string, unknown>> | null; error: { message: string; code: string } | null }>,
-      'TechnicalIndicator'
-    );
-    if (dbTech && dbTech.length > 0) {
-      technicalIndicators = dbTech;
+        .limit(30);
+
+      if (!error && data) {
+        technicalIndicators = data as Array<Record<string, unknown>>;
+      }
+    } catch (err) {
+      console.warn('Supabase technical indicators query failed:', err);
     }
 
-    // ============================================================
-    // 5. Get sector averages for valuation
-    // ============================================================
+    // Get sector averages for valuation
     let sectorAvg: SectorAverages = {
       avgPE: 8.5, avgPB: 1.2, avgROE: 0.14, avgEVEbitda: 6.5, avgDividendYield: 0.05,
     };
-    const dbSectorStats = await safeQuery<SupabaseSectorStats>(
-      () => supabase
+    try {
+      const { data, error } = await supabase
         .from('SectorStats')
         .select('*')
-        .eq('sector', stock!.sector)
-        .single(),
-      'SectorStats'
-    );
-    if (dbSectorStats) {
-      sectorAvg = {
-        avgPE: dbSectorStats.avgPE || 8.5,
-        avgPB: dbSectorStats.avgPB || 1.2,
-        avgROE: dbSectorStats.avgROE || 0.14,
-        avgEVEbitda: dbSectorStats.avgEVEbitda || 6.5,
-        avgDividendYield: (dbSectorStats.avgDividendYield || 5.0) / 100,
-      };
+        .eq('sector', stock.sector)
+        .single();
+
+      if (!error && data) {
+        const stats = data as SupabaseSectorStats;
+        sectorAvg = {
+          avgPE: stats.avgPE || 8.5,
+          avgPB: stats.avgPB || 1.2,
+          avgROE: stats.avgROE || 0.14,
+          avgEVEbitda: stats.avgEVEbitda || 6.5,
+          // SectorStats.avgDividendYield is stored as percentage (e.g. 5.0), convert to decimal
+          avgDividendYield: (stats.avgDividendYield || 5.0) / 100,
+        };
+      }
+    } catch {
+      // Use defaults
     }
 
-    // ============================================================
-    // 6. Run valuation if we have enough data
-    // ============================================================
+    // Run valuation if we have enough data
     let valuation = null;
     const latestFinancial = financialData?.[0];
     const hasBasicData = stock.price > 0 || (latestFinancial && (latestFinancial.eps > 0 || latestFinancial.bookValuePerShare > 0));
 
     if (hasBasicData) {
       try {
+        // DB stores dividendYield as decimal (0.05). Keep as-is for the valuation engine.
         const fundamentals: StockFundamentals = {
           ticker: stock.ticker,
           price: stock.price || 0,
@@ -210,7 +192,7 @@ export async function GET(
           bookValuePerShare: stock.bookValuePerShare || latestFinancial?.bookValuePerShare || 0,
           sharesOutstanding: stock.sharesOutstanding || 0,
           marketCap: stock.marketCap || 0,
-          dividendYield: stock.dividendYield || 0,
+          dividendYield: stock.dividendYield || 0, // stored as decimal in DB
           peRatio: stock.peRatio || (latestFinancial?.eps ? stock.price / latestFinancial.eps : 0),
           pbRatio: stock.pbRatio || (latestFinancial?.bookValuePerShare ? stock.price / latestFinancial.bookValuePerShare : 0),
           beta: stock.beta || 1.0,
@@ -234,7 +216,7 @@ export async function GET(
 
         valuation = runAllModels(fundamentals, sectorAvg, DEFAULT_MARKET_PARAMS);
       } catch (valErr) {
-        console.warn('[stocks/[ticker]] Valuation computation failed:', valErr);
+        console.warn('Valuation computation failed:', valErr);
         // Continue without valuation rather than crashing
       }
     }
@@ -242,9 +224,6 @@ export async function GET(
     // Map technical indicators to normalize field names
     const mappedTechIndicators = technicalIndicators.map(mapTechnicalIndicator);
 
-    // ============================================================
-    // 7. Build and return response - ALWAYS return a valid shape
-    // ============================================================
     return NextResponse.json({
       stock: {
         ...stock,
@@ -283,18 +262,11 @@ export async function GET(
       sectorAvg,
     });
   } catch (error) {
-    console.error('[stocks/[ticker]] Unhandled error:', error);
-    // Never return 500 - always return a meaningful error with 200 status
-    // so the frontend can handle it gracefully
+    console.error('Error fetching stock:', error);
+    // Never return 500 - always return a meaningful error
     return NextResponse.json(
-      {
-        stock: null,
-        valuation: null,
-        sectorAvg: { avgPE: 0, avgPB: 0, avgROE: 0, avgEVEbitda: 0 },
-        error: 'Failed to load stock data',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 200 }
+      { error: 'Failed to load stock data', details: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 200 } // Return 200 with error info to avoid frontend crashes
     );
   }
 }
