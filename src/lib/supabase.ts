@@ -2,6 +2,10 @@
  * Supabase Client for Server-Side Use
  * Used in all API routes instead of Prisma
  * Service role key bypasses RLS for server-side operations
+ *
+ * Note: If SUPABASE_SERVICE_ROLE_KEY is not a real service role key
+ * (e.g., same as the anon/publishable key), queries may fail due to RLS.
+ * All API routes must handle Supabase failures gracefully with fallbacks.
  */
 
 import { createClient } from '@supabase/supabase-js'
@@ -15,6 +19,22 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: false,
   },
 })
+
+/**
+ * Check if Supabase is reachable and queries can succeed.
+ * Returns true if a simple query works, false otherwise.
+ */
+export async function isSupabaseReachable(): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from('Stock')
+      .select('id')
+      .limit(1)
+    return !error
+  } catch {
+    return false
+  }
+}
 
 // Type helpers for Supabase tables
 export interface SupabaseStock {
