@@ -1,25 +1,23 @@
 ---
 Task ID: 1
-Agent: Main
-Task: Fix stock detail page errors, valuation engine, UI/UX, seed all stocks
+Agent: Main Agent
+Task: Fix stock detail page, add confidence threshold, redesign UI, update EGX stock data
 
 Work Log:
-- Diagnosed stock detail errors: macdHistogram vs macdHist field mismatch, null/undefined crashes with .toFixed(), sector icon mismatches
-- Fixed StockDetailPanel with safeToFixed() helper and macdHistogram compatibility
-- Fixed valuation engine: DCF zero-division, dividend yield decimal handling, English verdicts
-- Updated SECTOR_ICONS to include all actual DB sector names (Food, Construction, Chemicals, etc.)
-- Added dark mode consistency fixes for Dialog and select elements
-- Fixed all API routes to match actual Supabase schema (removed isin, yahooSymbol columns)
-- Added exchange/currency fields to stock inserts
-- Expanded price refresh from 20 to 50 tickers
-- Created SQL script for RLS INSERT policy (required for seeding new stocks)
-- Build passes, pushed to GitHub
+- Cloned project from GitHub and analyzed codebase structure
+- Identified root causes: API errors due to Supabase RLS issues, missing error handling, fake stock tickers
+- Fixed stock detail API route with comprehensive error handling and graceful fallbacks
+- Redesigned stock detail view: replaced Dialog with full-page overlay with 4 internal tabs
+- Added confidence threshold (50%): fair value only shown when confidence > 0.5
+- Updated EGX stock master list: removed ~145 fake tickers, kept 62 verified EGX stocks
+- Fixed Supabase client with better error handling documentation
+- Improved useStockDetail hook to handle API errors gracefully
+- Build and lint both pass successfully
+- Pushed all changes to GitHub
 
 Stage Summary:
-- All code fixes applied and committed
-- Stock detail page should now work without crashes
-- Fair value calculations fixed for edge cases
-- All 21 existing stocks in DB work correctly
-- 186 additional stocks from master list can't be seeded yet due to RLS policy
-- User needs to run add-stock-insert-policy.sql in Supabase SQL Editor to enable seeding
-- Key: sb_publishable_XaBRmFpzo2niyDpMN_UP_w_MnXxE6v3 is anon key, not service role
+- Stock detail page now shows full-page overlay instead of cramped dialog
+- Confidence threshold implemented: shows "Insufficient data" when below 50%
+- 62 verified EGX stocks across 13 sectors (removed all fake tickers)
+- API routes never crash - always return valid data or graceful errors
+- Changes pushed to: https://github.com/tiksahertok-ui/egx-pro-valuation-platform
