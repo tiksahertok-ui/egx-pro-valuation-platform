@@ -2,6 +2,7 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { requireAuth } from '@/lib/auth/requireAuth';
 
 const TickerParamsSchema = z.object({
   ticker: z.string().min(2).max(10).regex(/^[A-Z0-9]+$/),
@@ -11,6 +12,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
+  const authError = await requireAuth();
+  if (authError) return authError.error;
   try {
     const { ticker } = await params;
 

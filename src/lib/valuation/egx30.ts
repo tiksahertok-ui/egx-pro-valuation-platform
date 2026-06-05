@@ -74,7 +74,7 @@ export function computeIndexAlpha(
 export function getIndexRelativePerformance(
   stockReturn: number,
   stockBeta: number,
-  riskFreeRate: number = 0.19
+  riskFreeRate: number = 0.19  // CBE rate as of June 2026
 ): {
   stockReturn: number
   indexReturn: number

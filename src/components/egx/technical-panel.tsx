@@ -83,34 +83,12 @@ interface TechnicalData {
     };
   };
   supportResistance?: {
-    floorPivots: {
-      pivot: number; r1: number; r2: number; r3: number;
-      s1: number; s2: number; s3: number; type: string;
-    };
-    fibonacciPivots: {
-      pivot: number; r1: number; r2: number; r3: number;
-      s1: number; s2: number; s3: number; type: string;
-    };
+    floorPivots: PivotLevels;
+    fibonacciPivots: PivotLevels;
     swingLevels: { supports: number[]; resistances: number[] };
   };
-  confluentSignal?: {
-    direction: 'BUY' | 'SELL' | 'NEUTRAL';
-    strength: number;
-    confluenceCount: number;
-    triggeringIndicators: string[];
-    caveat?: string;
-  };
-  tradePlans?: Array<{
-    horizonLabel: string;
-    entryZoneLow: number;
-    entryZoneHigh: number;
-    primaryTarget: number;
-    secondaryTarget: number;
-    stopLoss: number;
-    riskRewardRatio: number;
-    basisOfEntry: string;
-    basisOfTarget: string;
-  }>;
+  confluentSignal?: ConfluentSignal;
+  tradePlans?: TradePlan[];
   storedTechnicals: {
     date: string;
     rsi14: number;
@@ -260,8 +238,8 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
   // Use server-computed S/R, confluence, and trade plans when available; fallback to client-side computation
   const pivotLevels = data.supportResistance?.floorPivots ?? (() => {
     const chartD = generateChartData(data.currentPrice, indicators);
-    const prevH = chartD.length > 1 ? Math.max(...chartD.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 1.02;
-    const prevL = chartD.length > 1 ? Math.min(...chartD.slice(-2).map((d: { close: number }) => d.close)) : data.currentPrice * 0.98;
+    const prevH = chartD.length > 1 ? Math.max(...chartD.slice(-2).map(d => d.close)) : data.currentPrice * 1.02;
+    const prevL = chartD.length > 1 ? Math.min(...chartD.slice(-2).map(d => d.close)) : data.currentPrice * 0.98;
     const prevC = chartD.length > 1 ? chartD[chartD.length - 2].close : data.currentPrice;
     return calculateFloorPivots(prevH, prevL, prevC);
   })();
@@ -278,7 +256,7 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
   });
 
   const tradePlans: TradePlan[] = data.tradePlans ?? (['short', 'medium', 'long'] as InvestmentHorizon[]).map(
-    (horizon) => generateTradePlan(data.currentPrice, indicators.volatility.atr14, pivotLevels, data.currentPrice * 1.2, horizon)
+    (horizon) => generateTradePlan(data.currentPrice, indicators.volatility.atr14, pivotLevels as PivotLevels, data.currentPrice * 1.2, horizon)
   );
 
   // Generate synthetic price history for chart
@@ -653,11 +631,22 @@ export default function TechnicalPanel({ ticker }: TechnicalPanelProps) {
 }
 
 // Helper: Generate chart data from indicators
+interface ChartDataPoint {
+  date: string;
+  close: number;
+  sma20: number;
+  sma50: number;
+  bbUpper: number;
+  bbMiddle: number;
+  bbLower: number;
+  volume: number;
+}
+
 function generateChartData(
   currentPrice: number,
   indicators: TechnicalData['indicators']
-) {
-  const data = [];
+): ChartDataPoint[] {
+  const data: ChartDataPoint[] = [];
   const { sma20, sma50 } = indicators.trend;
   const { bbUpper, bbMiddle, bbLower } = indicators.volatility;
   const days = 60;

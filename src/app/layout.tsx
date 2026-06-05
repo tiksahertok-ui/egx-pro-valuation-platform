@@ -27,7 +27,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // Default to Arabic (RTL) layout; client components can override based on locale
+  // Default to Arabic (RTL) layout for the Egyptian market context
+  // Client components can override based on locale detection
   return (
     <html lang="ar" dir="rtl" className="dark" suppressHydrationWarning>
       <body

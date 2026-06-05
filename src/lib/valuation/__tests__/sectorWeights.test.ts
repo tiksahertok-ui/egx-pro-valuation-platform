@@ -87,7 +87,7 @@ describe('modelWeightsToArray', () => {
       const arr = modelWeightsToArray(weights)
       expect(arr).toHaveLength(8)
       const sum = arr.reduce((a, b) => a + b, 0)
-      expect(sum).toBeCloseTo(1.0, 6, `Sector ${sector} array weights don't sum to 1.0`)
+      expect(sum).toBeCloseTo(1.0, 6)
     }
   })
 
@@ -118,7 +118,7 @@ describe('SECTOR_WEIGHTS integrity', () => {
   it('all sector weights sum to approximately 1.0', () => {
     for (const [sector, weights] of Object.entries(SECTOR_WEIGHTS)) {
       const sum = Object.values(weights).reduce((a, b) => a + b, 0)
-      expect(sum).toBeCloseTo(1.0, 6, `Sector ${sector} weights don't sum to 1.0`)
+      expect(sum).toBeCloseTo(1.0, 6)
     }
   })
 

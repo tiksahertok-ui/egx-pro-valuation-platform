@@ -509,7 +509,7 @@ function generatePriceHistory(stock: StockDefinition) {
   return prices;
 }
 
-function computeTechnicalIndicators(priceHistory: { close: number; high: number; low: number; volume: number }[]) {
+function computeTechnicalIndicators(priceHistory: { date?: string; close: number; high: number; low: number; volume: number }[]) {
   const results: {
     date: string; rsi14: number; macd: number; macdSignal: number; macdHistogram: number;
     sma20: number; sma50: number; sma200: number; ema12: number; ema26: number;
@@ -805,7 +805,7 @@ async function main() {
         data: {
           stockId: stock.id,
           ...financialData,
-          dataSource: 'estimated',  // Mark as estimated — replace with verified filings
+          dataSource: 'estimated_from_public_filings',  // Mark as estimated — replace with verified filings
           reportingDate: new Date(year, 11, 31),  // Dec 31 of the fiscal year
           reportType: 'annual',
           currency: 'EGP',

@@ -49,8 +49,12 @@ export default function DataFreshnessIndicator({ lastPriceAt, lastFinancialsAt }
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true)
-    setMarketStatus(getMarketStatus())
+    // Using a callback to avoid synchronous setState in effect body
+    const init = () => {
+      setMounted(true)
+      setMarketStatus(getMarketStatus())
+    }
+    init()
     // Update every 30 seconds
     const interval = setInterval(() => {
       setMarketStatus(getMarketStatus())

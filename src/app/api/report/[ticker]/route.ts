@@ -87,7 +87,7 @@ export async function POST(
     }
 
     // Validate request body if present
-    let bodyResult: z.SafeParseReturnType<any, any> = { success: true, data: undefined };
+    let bodyResult: { success: boolean; data?: unknown } = { success: true, data: undefined };
     try {
       const bodyText = await request.text();
       if (bodyText) {
@@ -98,7 +98,7 @@ export async function POST(
       // Empty or invalid body is acceptable for this endpoint
     }
     if (!bodyResult.success) {
-      return NextResponse.json({ error: 'Invalid request body', details: bodyResult.error?.flatten?.() ?? 'Validation failed' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
     }
 
     const forceRefresh = request.nextUrl.searchParams.get('forceRefresh') === 'true';

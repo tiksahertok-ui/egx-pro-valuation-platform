@@ -2,6 +2,7 @@
 import { db } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { requireAuth } from '@/lib/auth/requireAuth';
 
 const StocksQuerySchema = z.object({
   sector: z.string().optional(),
@@ -11,6 +12,8 @@ const StocksQuerySchema = z.object({
 }).optional();
 
 export async function GET(request: NextRequest) {
+  const authError = await requireAuth();
+  if (authError) return authError.error;
   try {
     // Parse and validate query params
     const url = request.url;
