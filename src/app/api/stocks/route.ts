@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { supabase, type SupabaseStock } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
+import { getFinancialDataByTicker } from '@/lib/data/egx-financial-data';
 
 export const dynamic = 'force-dynamic';
 
-// Helper: convert a master-list entry to a SupabaseStock-like shape with zeroed financials
+// Helper: convert a master-list entry to a SupabaseStock-like shape with hardcoded financial data
 function masterToStock(s: typeof EGX_STOCKS[number]): SupabaseStock {
+  const finData = getFinancialDataByTicker(s.ticker);
   return {
     id: s.ticker,
     ticker: s.ticker,
@@ -13,18 +15,18 @@ function masterToStock(s: typeof EGX_STOCKS[number]): SupabaseStock {
     nameAr: s.nameAr,
     sector: s.sector,
     industry: s.industry,
-    price: 0,
-    marketCap: 0,
-    peRatio: 0,
-    pbRatio: 0,
-    eps: 0,
-    bookValuePerShare: 0,
-    dividendYield: 0,
-    beta: 1.0,
-    sharesOutstanding: 0,
-    fiftyTwoWeekHigh: 0,
-    fiftyTwoWeekLow: 0,
-    avgVolume: 0,
+    price: finData?.price || 0,
+    marketCap: finData?.marketCap || 0,
+    peRatio: finData?.peRatio || 0,
+    pbRatio: finData?.pbRatio || 0,
+    eps: finData?.eps || 0,
+    bookValuePerShare: finData?.bookValuePerShare || 0,
+    dividendYield: finData?.dividendYield || 0,
+    beta: finData?.beta || 1.0,
+    sharesOutstanding: finData?.sharesOutstanding || 0,
+    fiftyTwoWeekHigh: finData?.fiftyTwoWeekHigh || 0,
+    fiftyTwoWeekLow: finData?.fiftyTwoWeekLow || 0,
+    avgVolume: finData?.avgVolume || 0,
     egx30Beta: 0,
     exchange: 'EGX',
     currency: 'EGP',
@@ -62,14 +64,31 @@ export async function GET() {
       dbMap.set(s.ticker, s);
     }
 
-    // 3. Merge: for each master list stock, use DB data if available, otherwise use zeroed master entry
+    // 3. Merge: for each master list stock, use DB data if available, otherwise use hardcoded/master entry
     const mergedStocks: SupabaseStock[] = EGX_STOCKS.map(masterStock => {
       const dbStock = dbMap.get(masterStock.ticker);
       if (dbStock) {
-        // Stock exists in DB - use DB data (which has real prices/financials)
+        // If DB stock has no financial data, enrich from hardcoded data
+        const finData = getFinancialDataByTicker(masterStock.ticker);
+        if (finData && (dbStock.price === 0 || dbStock.eps === 0)) {
+          return {
+            ...dbStock,
+            price: dbStock.price || finData.price,
+            eps: dbStock.eps || finData.eps,
+            bookValuePerShare: dbStock.bookValuePerShare || finData.bookValuePerShare,
+            peRatio: dbStock.peRatio || finData.peRatio,
+            pbRatio: dbStock.pbRatio || finData.pbRatio,
+            marketCap: dbStock.marketCap || finData.marketCap,
+            dividendYield: dbStock.dividendYield || finData.dividendYield,
+            beta: dbStock.beta || finData.beta,
+            sharesOutstanding: dbStock.sharesOutstanding || finData.sharesOutstanding,
+            fiftyTwoWeekHigh: dbStock.fiftyTwoWeekHigh || finData.fiftyTwoWeekHigh,
+            fiftyTwoWeekLow: dbStock.fiftyTwoWeekLow || finData.fiftyTwoWeekLow,
+            avgVolume: dbStock.avgVolume || finData.avgVolume,
+          };
+        }
         return dbStock;
       }
-      // Stock NOT in DB - add it with zeroed financial data from master list
       return masterToStock(masterStock);
     });
 
@@ -98,7 +117,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error fetching stocks:', error);
-    // Fallback to master list
+    // Fallback to master list with financial data
     const masterStocks = EGX_STOCKS.map(s => masterToStock(s));
     return NextResponse.json({
       stocks: masterStocks,

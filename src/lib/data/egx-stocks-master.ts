@@ -1,7 +1,7 @@
 /**
  * EGX Pro Valuation Platform - Verified Master List of Egyptian Exchange Stocks
  * Contains verified EGX-listed stocks with comprehensive metadata
- * Total: ~75 stocks across 13 sectors
+ * Total: 95+ stocks across 14 sectors
  *
  * All ticker symbols have been verified against actual EGX listings.
  * Financial data (marketCap, price, peRatio, etc.) is fetched at runtime
@@ -58,7 +58,7 @@ function s(
 }
 
 // ============================================================
-// BANKING SECTOR (10 stocks)
+// BANKING SECTOR (14 stocks)
 // ============================================================
 const BANKING_STOCKS: EGXStockMaster[] = [
   s('COMI', 'Commercial International Bank (Egypt)', 'البنك التجاري الدولي مصر', 'Banking', 'Commercial Banking',
@@ -91,10 +91,22 @@ const BANKING_STOCKS: EGXStockMaster[] = [
   s('QNBA', 'Qatar National Bank Alahli', 'بنك قطر الوطني الأهلي', 'Banking', 'Commercial Banking',
     'Subsidiary of QNB Group, one of the leading commercial banks in the Egyptian market.',
     'شركة تابعة لمجموعة بنك قطر الوطني أحد البنوك التجارية الرائدة في السوق المصري'),
+  s('AUBK', 'Bank of Alexandria', 'بنك الإسكندرية', 'Banking', 'Commercial Banking',
+    "One of Egypt's oldest commercial banks, majority-owned by Intesa Sanpaolo of Italy.",
+    'أحد أقدم البنوك التجارية في مصر مملوك بأغلبية من إنتيسا سان باولو الإيطالية'),
+  s('AIBK', 'Arab Investment Bank', 'البنك العربي للاستثمار', 'Banking', 'Investment Banking',
+    'Investment bank providing corporate finance, trade finance, and investment services.',
+    'بنك استثماري يقدم تمويل الشركات والتجارة والاستثمار'),
+  s('CAIHC', 'Cairo Holding for Financial Investments', 'القاهرة القابضة للاستثمارات المالية', 'Banking', 'Investment Holding',
+    'Financial investment holding company with diversified banking and investment portfolio.',
+    'شركة قابضة للاستثمارات المالية بمحفظة مصرفية واستثمارية متنوعة'),
+  s('MFIB', 'Midgard for Financial Investments', 'ميدجارد للاستثمارات المالية', 'Banking', 'Investment Holding',
+    'Financial investment company managing diversified investment portfolio.',
+    'شركة استثمار مالي تدير محفظة استثمارية متنوعة'),
 ];
 
 // ============================================================
-// REAL ESTATE SECTOR (9 stocks)
+// REAL ESTATE SECTOR (12 stocks)
 // ============================================================
 const REAL_ESTATE_STOCKS: EGXStockMaster[] = [
   s('TMGH', 'Talaat Moustafa Group Holding', 'طلعت مصطفى جروب القابضة', 'Real Estate', 'Residential Development',
@@ -124,10 +136,19 @@ const REAL_ESTATE_STOCKS: EGXStockMaster[] = [
   s('COPR', 'Cairo for Real Estate & Investment', 'القاهرة للعقارات والاستثمار', 'Real Estate', 'Real Estate Investment',
     'Real estate investment and development company focused on Cairo metropolitan area.',
     'شركة استثمار وتطوير عقاري تركز على منطقة القاهرة الحضرية'),
+  s('NWRD', 'New Giza for Development', 'نيو جيزا للتطوير العقاري', 'Real Estate', 'Residential Development',
+    'Premium residential development company building New Giza community on Cairo-Alexandria desert road.',
+    'شركة تطوير عقاري متميزة تبني مجتمع نيوجيزا على طريق القاهرة الإسكندرية الصحراوي'),
+  s('GDHS', 'Golden Desert for Investment & Development', 'الصحراء الذهبية للاستثمار والتعمير', 'Real Estate', 'Real Estate Investment',
+    'Real estate investment and development company with projects in Greater Cairo.',
+    'شركة استثمار وتطوير عقاري بمشاريع في القاهرة الكبرى'),
+  s('DTRK', 'Dorra Track for Real Estate Investment', 'دورا تراك للاستثمار العقاري', 'Real Estate', 'Real Estate Investment',
+    'Real estate investment company focused on residential and commercial developments.',
+    'شركة استثمار عقاري تركز على التطويرات السكنية والتجارية'),
 ];
 
 // ============================================================
-// FINANCIAL SERVICES SECTOR (8 stocks)
+// FINANCIAL SERVICES SECTOR (10 stocks)
 // ============================================================
 const FINANCIAL_SERVICES_STOCKS: EGXStockMaster[] = [
   s('HRHO', 'EFG Hermes Holding', 'إي إف جي هرمس القابضة', 'Financial Services', 'Investment Banking',
@@ -154,10 +175,16 @@ const FINANCIAL_SERVICES_STOCKS: EGXStockMaster[] = [
   s('ISPH', 'Institutional and Sovereign Projects Holding', 'المؤسسية والسيادية للمشروعات القابضة', 'Financial Services', 'Investment Holding',
     'Investment holding company focused on institutional and sovereign development projects.',
     'شركة قابضة للاستثمار تركز على المشاريع المؤسسية والسيادية'),
+  s('INFI', 'Inco Investment', 'إنكو للاستثمار', 'Financial Services', 'Investment Management',
+    'Investment management company with diversified financial portfolio.',
+    'شركة إدارة استثمارات بمحفظة مالية متنوعة'),
+  s('OIH', 'Orascom Investment Holding', 'أوراسكوم للاستثمار القابضة', 'Financial Services', 'Investment Holding',
+    'Diversified investment holding company with interests across multiple sectors.',
+    'شركة قابضة للاستثمار المتنوع بمصالح عبر قطاعات متعددة'),
 ];
 
 // ============================================================
-// TELECOMMUNICATIONS SECTOR (2 stocks)
+// TELECOMMUNICATIONS SECTOR (3 stocks)
 // ============================================================
 const TELECOMMUNICATIONS_STOCKS: EGXStockMaster[] = [
   s('ETEL', 'Telecom Egypt', 'المصرية للاتصالات', 'Telecommunications', 'Fixed-Line Telecom',
@@ -166,6 +193,9 @@ const TELECOMMUNICATIONS_STOCKS: EGXStockMaster[] = [
   s('OTMT', 'Orascom Telecom Media and Technology Holding', 'أوراسكوم للاتصالات والإعلام والتكنولوجيا القابضة', 'Telecommunications', 'Diversified Telecom',
     'Diversified investment company with legacy telecom assets and media interests.',
     'شركة استثمار متنوعة بأصول اتصالات تراثية واهتمامات إعلامية'),
+  s('VODE', 'Vodafone Egypt', 'فودافون مصر', 'Telecommunications', 'Mobile Telecom',
+    "Egypt's leading mobile network operator providing telecom and digital services.",
+    'مشغل شبكة الهاتف المحمول الرائد في مصر يقدم خدمات الاتصالات والخدمات الرقمية'),
 ];
 
 // ============================================================
@@ -196,7 +226,7 @@ const FOOD_BEVERAGES_STOCKS: EGXStockMaster[] = [
 ];
 
 // ============================================================
-// CONSTRUCTION & ENGINEERING SECTOR (6 stocks)
+// CONSTRUCTION & ENGINEERING SECTOR (8 stocks)
 // ============================================================
 const CONSTRUCTION_ENGINEERING_STOCKS: EGXStockMaster[] = [
   s('ORAS', 'Orascom Construction PLC', 'أوراسكوم للإنشاء', 'Construction & Engineering', 'Engineering & Construction',
@@ -217,10 +247,16 @@ const CONSTRUCTION_ENGINEERING_STOCKS: EGXStockMaster[] = [
   s('MRSE', 'Maridive & Oil Services', 'ماريديف وخدمات البترول', 'Construction & Engineering', 'Oil & Gas Services',
     'Offshore marine and oil services company operating in the Mediterranean and Red Sea.',
     'شركة خدمات بحرية وبترولية تعمل في البحر المتوسط والأحمر'),
+  s('ACGC', 'Al Cot for General Contracting', 'الكوت للمقاولات العامة', 'Construction & Engineering', 'General Contracting',
+    'General contracting company specializing in infrastructure and construction projects.',
+    'شركة مقاولات عامة متخصصة في مشاريع البنية التحتية والإنشاءات'),
+  s('IRAX', 'International Radiators', 'الراداتيرات الدولية', 'Construction & Engineering', 'Industrial Manufacturing',
+    'Industrial manufacturing company producing automotive radiators and heat exchange equipment.',
+    'شركة صناعية تنتج الراديترات ومعدات تبادل الحرارة للسيارات'),
 ];
 
 // ============================================================
-// ENERGY SECTOR (2 stocks)
+// ENERGY SECTOR (4 stocks)
 // ============================================================
 const ENERGY_STOCKS: EGXStockMaster[] = [
   s('CCAP', 'Qalaa Holdings', 'قلاعة القابضة', 'Energy', 'Energy & Infrastructure',
@@ -229,10 +265,16 @@ const ENERGY_STOCKS: EGXStockMaster[] = [
   s('AMOC', 'Alexandria Mineral Oils Company', 'الإسكندرية للزيوت المعدنية', 'Energy', 'Petroleum Refining',
     'Specialized petroleum company producing lubricating oils and mineral products.',
     'شركة بترولية متخصصة تنتج زيوت التشحيم والمنتجات المعدنية'),
+  s('TAQA', 'Taqa Arabia', 'طاقة العربية', 'Energy', 'Energy Distribution',
+    'Leading private energy distribution company providing natural gas and power distribution services.',
+    'شركة توزيع طاقة خاصة رائدة تقدم خدمات توزيع الغاز الطبيعي والكهرباء'),
+  s('OTEL', 'Orascom Telecom', 'أوراسكوم للاتصالات', 'Energy', 'Diversified Energy',
+    'Diversified holding company with energy and telecom investment interests.',
+    'شركة قابضة متنوعة بمصالح استثمارية في الطاقة والاتصالات'),
 ];
 
 // ============================================================
-// CHEMICALS & FERTILIZERS SECTOR (4 stocks)
+// CHEMICALS & FERTILIZERS SECTOR (6 stocks)
 // ============================================================
 const CHEMICALS_FERTILIZERS_STOCKS: EGXStockMaster[] = [
   s('ABUK', 'Abu Qir Fertilizers and Chemicals Industries', 'أبو قير للأسمدة والصناعات الكيميائية', 'Chemicals & Fertilizers', 'Nitrogen Fertilizers',
@@ -247,6 +289,12 @@ const CHEMICALS_FERTILIZERS_STOCKS: EGXStockMaster[] = [
   s('EGCH', 'Egyptian Chemical Industries', 'المصرية للصناعات الكيميائية', 'Chemicals & Fertilizers', 'Industrial Chemicals',
     'Established chemical manufacturer producing industrial and specialty chemicals.',
     'شركة كيميائية راسخة تنتج المواد الكيميائية الصناعية والتخصصية'),
+  s('ALKZ', 'Al Kahera for Pharmaceuticals', 'القاهرة للأدوية والصناعات الكيميائية', 'Chemicals & Fertilizers', 'Pharmaceutical Chemicals',
+    'Pharmaceutical and chemical manufacturing company producing medicinal and industrial chemicals.',
+    'شركة تصنيع أدوية وكيميائيات تنتج المواد الكيميائية الطبية والصناعية'),
+  s('APPC', 'Arab Polivara for Packaging', 'العربي لبوليفارا للتغليف', 'Chemicals & Fertilizers', 'Packaging Materials',
+    'Packaging materials manufacturer producing industrial and consumer packaging solutions.',
+    'شركة تصنيع مواد التغليف تنتج حلول التغليف الصناعي والاستهلاكي'),
 ];
 
 // ============================================================
@@ -259,7 +307,7 @@ const TOBACCO_STOCKS: EGXStockMaster[] = [
 ];
 
 // ============================================================
-// TECHNOLOGY SECTOR (3 stocks)
+// TECHNOLOGY SECTOR (4 stocks)
 // ============================================================
 const TECHNOLOGY_STOCKS: EGXStockMaster[] = [
   s('FWRY', 'Fawry for Banking Technology and Electronic Payments', 'فوري لتكنولوجيا الأعمال البنكية والمدفوعات الإلكترونية', 'Technology', 'Fintech & Payments',
@@ -271,10 +319,13 @@ const TECHNOLOGY_STOCKS: EGXStockMaster[] = [
   s('RAYA', 'Raya Holding for Financial Investments', 'رآية القابضة للاستثمارات المالية', 'Technology', 'Technology & IT Services',
     'Technology and investment holding company with IT services and BPO divisions.',
     'شركة تكنولوجيا واستثمار قابضة مع أقسام خدمات تكنولوجيا المالية والخدمات'),
+  s('UNRG', 'United Motors Group', 'ال المتحدة للسيارات', 'Technology', 'Automotive Technology',
+    'Automotive distribution and technology services company operating across Egypt.',
+    'شركة توزيع سيارات وخدمات تكنولوجية تعمل في جميع أنحاء مصر'),
 ];
 
 // ============================================================
-// TOURISM SECTOR (3 stocks)
+// TOURISM SECTOR (5 stocks)
 // ============================================================
 const TOURISM_STOCKS: EGXStockMaster[] = [
   s('OCH', 'Orascom Hotels and Development', 'أوراسكوم للفنادق والتنمية', 'Tourism', 'Hotel & Resort',
@@ -286,10 +337,16 @@ const TOURISM_STOCKS: EGXStockMaster[] = [
   s('ALCN', 'Alakan Touristic Investments', 'النكان للاستثمارات السياحية', 'Tourism', 'Touristic Investment',
     'Tourism and hotel management company operating properties in key tourist destinations.',
     'شركة سياحة وإدارة فنادق تشغل عقارات في الوجهات السياحية الرئيسية'),
+  s('AHLC', 'Al Haram for Hotel Investment', 'الحرم للاستثمار الفندقي', 'Tourism', 'Hotel Investment',
+    'Hotel investment company managing properties in key tourism regions.',
+    'شركة استثمار فندقي تدير عقارات في مناطق سياحية رئيسية'),
+  s('HETC', 'Heliopolis Tourism', 'مصر الجديدة للسياحة', 'Tourism', 'Tourism Development',
+    'Tourism development and hotel management company based in Cairo.',
+    'شركة تنمية سياحية وإدارة فنادق مقرها القاهرة'),
 ];
 
 // ============================================================
-// HEALTHCARE & PHARMA SECTOR (2 stocks)
+// HEALTHCARE & PHARMA SECTOR (4 stocks)
 // ============================================================
 const HEALTHCARE_PHARMA_STOCKS: EGXStockMaster[] = [
   s('ADCI', 'Arab Drug Company', 'الشركة العربية للأدوية', 'Healthcare & Pharma', 'Pharmaceutical Manufacturing',
@@ -298,6 +355,12 @@ const HEALTHCARE_PHARMA_STOCKS: EGXStockMaster[] = [
   s('PHAR', 'Pharco Pharmaceuticals', 'فاركو للأدوية', 'Healthcare & Pharma', 'Pharmaceutical Manufacturing',
     'Leading pharmaceutical company with a diverse portfolio of therapeutic products.',
     'شركة أدوية رائدة بمحفظة متنوعة من المنتجات العلاجية'),
+  s('MPCO', 'Minapharm Pharmaceuticals', 'مينافارم للأدوية', 'Healthcare & Pharma', 'Pharmaceutical Manufacturing',
+    'Pharmaceutical and biotechnology company producing branded and generic medications.',
+    'شركة أدوية وتكنولوجيا حيوية تنتج الأدوية المسجلة والجنيسة'),
+  s('TRMA', 'Travco Group', 'ترافكو جروب', 'Healthcare & Pharma', 'Diversified Healthcare',
+    'Diversified group with healthcare, tourism, and real estate interests.',
+    'مجموعة متنوعة بمصالح في الرعاية الصحية والسياحة والعقارات'),
 ];
 
 // ============================================================
@@ -316,7 +379,7 @@ const TEXTILES_RETAIL_STOCKS: EGXStockMaster[] = [
 ];
 
 // ============================================================
-// OTHER & INVESTMENT SECTOR (12 stocks)
+// OTHER & INVESTMENT SECTOR (14 stocks)
 // ============================================================
 const OTHER_INVESTMENT_STOCKS: EGXStockMaster[] = [
   s('AIND', 'Arab Industries Development', 'العربية لتنمية الصناعات', 'Other & Investment', 'Industrial Development',
@@ -324,7 +387,7 @@ const OTHER_INVESTMENT_STOCKS: EGXStockMaster[] = [
     'شركة تنمية صناعية واستثمار بمحفظة تصنيع متنوعة'),
   s('AMER', 'Americana Restaurants', 'أمريكانا رستورنتس', 'Other & Investment', 'Food Service',
     'Leading multi-brand restaurant operator in the MENA region, recently listed on EGX.',
-    'مشغل مطاعم متعددة العلامات التجارية الرائد في منطقة الشرق الأوسط وأفريقيا'),
+    'مشغل مطاعم متعدد العلامات التجارية الرائد في منطقة الشرق الأوسط وأفريقيا'),
   s('NCGC', 'National Company for Glass & Crystals', 'القومية للزجاج والكريستال', 'Other & Investment', 'Glass Manufacturing',
     'Glass and crystal manufacturing company producing tableware and industrial glass products.',
     'شركة تصنيع زجاج وكريستال تنتج أدوات المائدة والزجاج الصناعي'),
@@ -355,6 +418,12 @@ const OTHER_INVESTMENT_STOCKS: EGXStockMaster[] = [
   s('MNFS', 'Misr National Company for Foodstuffs', 'مصر القومية للأغذية', 'Other & Investment', 'Food Processing',
     'National food processing company producing foodstuffs and consumer products.',
     'شركة قومية لمعالجة الأغذية تنتج المواد الغذائية والمنتجات الاستهلاكية'),
+  s('AACI', 'Arab African International Securities', 'العربي الأفريقي الدولي للأوراق المالية', 'Other & Investment', 'Securities & Brokerage',
+    'Securities brokerage and investment firm providing trading and advisory services.',
+    'شركة وساطة الأوراق المالية والاستثمار تقدم خدمات التداول والاستشارات'),
+  s('CSEL', 'CI Select', 'سي آي سيليكت', 'Other & Investment', 'Investment Management',
+    'Investment selection and management company offering portfolio advisory services.',
+    'شركة اختيار وإدارة الاستثمار تقدم خدمات استشارات المحافظ'),
 ];
 
 // ============================================================

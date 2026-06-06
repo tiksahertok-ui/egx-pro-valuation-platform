@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
+import { EGX_FINANCIAL_DATA } from '@/lib/data/egx-financial-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,6 @@ export async function POST() {
   try {
     // Step 1: Seed ALL stocks to Supabase using upsert for efficiency
     let created = 0;
-    let updated = 0;
     let skipped = 0;
 
     // Build upsert payload for all stocks
@@ -37,7 +37,6 @@ export async function POST() {
           console.warn(`Batch upsert failed at offset ${i}:`, error.message);
           skipped += batch.length;
         } else {
-          // Count as processed (can't easily distinguish created vs updated with upsert)
           created += batch.length;
         }
       } catch {
@@ -45,42 +44,56 @@ export async function POST() {
       }
     }
 
-    // Step 2: Try to refresh prices from Yahoo Finance (top 50 by liquidity)
+    // Step 2: Update hardcoded financial data into Supabase
+    let financialsUpdated = 0;
+    for (const fd of EGX_FINANCIAL_DATA) {
+      try {
+        const updateData: Record<string, unknown> = {
+          price: fd.price,
+          eps: fd.eps,
+          bookValuePerShare: fd.bookValuePerShare,
+          peRatio: fd.peRatio,
+          pbRatio: fd.pbRatio,
+          marketCap: fd.marketCap,
+          dividendYield: fd.dividendYield,
+          beta: fd.beta,
+          sharesOutstanding: fd.sharesOutstanding,
+          fiftyTwoWeekHigh: fd.fiftyTwoWeekHigh,
+          fiftyTwoWeekLow: fd.fiftyTwoWeekLow,
+          avgVolume: fd.avgVolume,
+          lastPriceAt: new Date().toISOString(),
+        };
+
+        const { error } = await supabase
+          .from('Stock')
+          .update(updateData)
+          .eq('ticker', fd.ticker);
+
+        if (!error) {
+          financialsUpdated++;
+        }
+      } catch {
+        // Continue
+      }
+    }
+
+    // Step 3: Try to refresh prices from Yahoo Finance (top 30)
     let pricesRefreshed = 0;
     let pricesFailed = 0;
     const topTickers = [
-      // Banking
-      'COMI', 'BNQA', 'ADIB', 'BTFH', 'SAUD', 'MISR', 'NBEA', 'CIEB', 'FAIT',
-      // Real Estate
-      'TMGH', 'PHDC', 'MHMD', 'OCDI', 'ORHD', 'HDBR', 'MNHD',
-      // Financial Services
-      'HRHO', 'CIRA', 'BINV', 'ECAP',
-      // Telecom
-      'ETEL', 'VODE', 'OTMT',
-      // Food & Beverages
-      'JUFO', 'EKRI', 'DOMT',
-      // Construction & Engineering
-      'ORAS', 'SWDY', 'SKPC', 'ALUM', 'ESRS',
-      // Energy
-      'CCAP', 'AMOC',
-      // Chemicals & Fertilizers
-      'ABUK', 'SPMD',
-      // Tobacco
-      'EAST',
-      // Technology
-      'FWRY', 'EFLS', 'RAYA',
-      // Other liquid stocks
-      'CSEL', 'OTEL', 'HOCA', 'MRSE', 'BDCO', 'HALW', 'APPC', 'DAPH',
+      'COMI', 'TMGH', 'ORAS', 'SWDY', 'EAST', 'ETEL', 'HRHO', 'ABUK',
+      'PHDC', 'MNHD', 'OCDI', 'FWRY', 'CIRA', 'ADIB', 'JUFO', 'EKRI',
+      'SKPC', 'ALUM', 'ESRS', 'CCAP', 'AMOC', 'FAIT', 'MISR', 'NBEA',
+      'ORHD', 'BTFH', 'SAUD', 'CIEB', 'RAYA', 'EFLS',
     ];
 
     for (const ticker of topTickers) {
       try {
-        // Construct yahooSymbol from ticker + '.CA' suffix
         const yahooSymbol = `${ticker}.CA`;
 
         const { data: stockData } = await supabase
           .from('Stock')
-          .select('id, fiftyTwoWeekHigh, fiftyTwoWeekLow')
+          .select('id')
           .eq('ticker', ticker)
           .single();
 
@@ -106,6 +119,14 @@ export async function POST() {
             if (meta.fiftyTwoWeekHigh) updateData.fiftyTwoWeekHigh = meta.fiftyTwoWeekHigh;
             if (meta.fiftyTwoWeekLow) updateData.fiftyTwoWeekLow = meta.fiftyTwoWeekLow;
 
+            // Recalculate PE/PB if we have financial data
+            const finData = EGX_FINANCIAL_DATA.find(d => d.ticker === ticker);
+            if (finData) {
+              updateData.peRatio = finData.eps > 0 ? meta.regularMarketPrice / finData.eps : 0;
+              updateData.pbRatio = finData.bookValuePerShare > 0 ? meta.regularMarketPrice / finData.bookValuePerShare : 0;
+              updateData.marketCap = finData.sharesOutstanding * meta.regularMarketPrice;
+            }
+
             await supabase
               .from('Stock')
               .update(updateData)
@@ -126,7 +147,7 @@ export async function POST() {
       }
     }
 
-    // Step 3: Update market params
+    // Step 4: Update market params
     try {
       const { data: existingParams } = await supabase
         .from('MarketParams')
@@ -149,7 +170,8 @@ export async function POST() {
 
     return NextResponse.json({
       success: true,
-      seed: { created, updated, skipped },
+      seed: { created, skipped },
+      financials: { updated: financialsUpdated, total: EGX_FINANCIAL_DATA.length },
       prices: { refreshed: pricesRefreshed, failed: pricesFailed },
       totalStocks: EGX_STOCKS.length,
     });

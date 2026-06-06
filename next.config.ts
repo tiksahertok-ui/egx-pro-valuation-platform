@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
+  output: 'standalone',
   images: {
     remotePatterns: [
       {
@@ -12,6 +13,11 @@ const nextConfig: NextConfig = {
         hostname: '**',
       },
     ],
+  },
+  // Handle missing env vars gracefully for Vercel deployment
+  env: {
+    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
   },
 };
 
