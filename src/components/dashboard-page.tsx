@@ -1,10 +1,11 @@
 'use client';
 
 import { useMemo } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Activity, BarChart3, ArrowUpRight, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Activity, BarChart3, ArrowUpRight, Info, Globe, Shield, PieChart } from 'lucide-react';
 import { LineChart, Line, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatPrice, formatMarketCap, CHART_COLORS } from '@/lib/helpers';
 import type { StockData, SectorData, PageView } from '@/lib/types';
@@ -53,7 +54,6 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
       .slice(0, 8);
   }, [stocks]);
 
-  // Top stocks by market cap for the featured section
   const topStocks = useMemo(() => {
     return [...stocks]
       .filter(s => s.price > 0)
@@ -76,44 +76,70 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
 
   return (
     <div className="space-y-6 p-6">
+      {/* Market Summary Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Globe className="w-5 h-5 text-emerald-500" />
+            Market Summary
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Egyptian Exchange - Real-time valuation data</p>
+        </div>
+        <Badge variant="outline" className="text-[10px] border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-mono">
+          {stocks.length} stocks tracked
+        </Badge>
+      </div>
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <DollarSign className="w-4 h-4 text-emerald-500" />
-              <p className="text-xs text-muted-foreground">Total Market Cap</p>
+        <Card className="border-border/50 bg-gradient-to-br from-emerald-500/5 to-transparent backdrop-blur-sm overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full -translate-y-4 translate-x-4" />
+          <CardContent className="p-4 relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <DollarSign className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">Total Market Cap</p>
             </div>
-            <p className="text-lg font-bold font-mono">
+            <p className="text-xl font-bold font-mono">
               {stats.totalMarketCap > 0 ? formatMarketCap(stats.totalMarketCap) : '—'}
             </p>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <BarChart3 className="w-4 h-4 text-emerald-500" />
-              <p className="text-xs text-muted-foreground">Total Stocks</p>
+        <Card className="border-border/50 bg-gradient-to-br from-emerald-500/5 to-transparent backdrop-blur-sm overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full -translate-y-4 translate-x-4" />
+          <CardContent className="p-4 relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <BarChart3 className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">Total Stocks</p>
             </div>
-            <p className="text-lg font-bold font-mono">{stats.stocksCount}</p>
+            <p className="text-xl font-bold font-mono">{stats.stocksCount}</p>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Activity className="w-4 h-4 text-emerald-500" />
-              <p className="text-xs text-muted-foreground">Sectors</p>
+        <Card className="border-border/50 bg-gradient-to-br from-emerald-500/5 to-transparent backdrop-blur-sm overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full -translate-y-4 translate-x-4" />
+          <CardContent className="p-4 relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <PieChart className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">Sectors</p>
             </div>
-            <p className="text-lg font-bold font-mono">{stats.sectorsCount}</p>
+            <p className="text-xl font-bold font-mono">{stats.sectorsCount}</p>
           </CardContent>
         </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Activity className="w-4 h-4 text-emerald-500" />
-              <p className="text-xs text-muted-foreground">Avg P/E Ratio</p>
+        <Card className="border-border/50 bg-gradient-to-br from-emerald-500/5 to-transparent backdrop-blur-sm overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/5 rounded-full -translate-y-4 translate-x-4" />
+          <CardContent className="p-4 relative">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                <Activity className="w-4 h-4 text-emerald-500" />
+              </div>
+              <p className="text-xs text-muted-foreground font-medium">Avg P/E Ratio</p>
             </div>
-            <p className="text-lg font-bold font-mono">{stats.avgPE > 0 ? stats.avgPE.toFixed(1) : '—'}</p>
+            <p className="text-xl font-bold font-mono">{stats.avgPE > 0 ? stats.avgPE.toFixed(1) : '—'}</p>
           </CardContent>
         </Card>
       </div>
@@ -201,7 +227,7 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
           <CardHeader className="pb-3 px-4 pt-4">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-500" />
+              <Shield className="w-4 h-4 text-emerald-500" />
               Sector Distribution
             </CardTitle>
           </CardHeader>
@@ -240,7 +266,10 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader className="pb-3 px-4 pt-4">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold">Featured Stocks</CardTitle>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Shield className="w-4 h-4 text-emerald-500" />
+              Featured Stocks
+            </CardTitle>
             <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => onNavigate('stocks')}>
               View All <ArrowUpRight className="w-3 h-3" />
             </Button>
@@ -255,7 +284,7 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
                 className="p-3 rounded-lg border border-border/50 hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-left group"
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-7 h-7 rounded bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-[10px] font-bold font-mono shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-[10px] font-bold font-mono shrink-0">
                     {s.ticker.slice(0, 2)}
                   </div>
                   <div className="min-w-0">
@@ -263,8 +292,15 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
                     <p className="text-[10px] text-muted-foreground truncate">{s.name}</p>
                   </div>
                 </div>
-                <p className="text-xs font-bold font-mono">{s.price > 0 ? formatPrice(s.price) : '—'}</p>
+                <p className="text-sm font-bold font-mono">{s.price > 0 ? formatPrice(s.price) : '—'}</p>
                 {s.sector && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.sector}</p>}
+                {s.peRatio > 0 && (
+                  <div className="mt-1.5 flex items-center gap-1">
+                    <Badge variant="outline" className="text-[9px] font-mono px-1.5 py-0 h-4 border-border/50">
+                      P/E {s.peRatio.toFixed(1)}
+                    </Badge>
+                  </div>
+                )}
               </button>
             ))}
           </div>

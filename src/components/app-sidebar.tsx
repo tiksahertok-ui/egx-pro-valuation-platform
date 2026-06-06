@@ -1,6 +1,6 @@
 'use client';
 
-import { LayoutDashboard, BarChart3, PieChart, Star, RefreshCw, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, BarChart3, PieChart, Star, RefreshCw, Sun, Moon, Shield } from 'lucide-react';
 import {
   Sidebar,
   SidebarContent,
@@ -59,7 +59,7 @@ interface AppSidebarProps {
 
 const NAV_ITEMS = [
   { id: 'dashboard' as PageView, label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'stocks' as PageView, label: 'Stocks', icon: BarChart3 },
+  { id: 'stocks' as PageView, label: 'All Stocks', icon: BarChart3 },
   { id: 'sectors' as PageView, label: 'Sectors', icon: PieChart },
   { id: 'watchlist' as PageView, label: 'Watchlist', icon: Star },
 ];
@@ -76,12 +76,12 @@ export function AppSidebar({
     <Sidebar collapsible="icon" className="border-r border-border/50">
       <SidebarHeader className="px-3 py-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
-            <BarChart3 className="h-4 w-4" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-sm">
+            <Shield className="h-4 w-4" />
           </div>
           <div className="group-data-[collapsible=icon]:hidden">
             <h1 className="text-sm font-bold tracking-tight">EGX Pro</h1>
-            <p className="text-[10px] text-muted-foreground leading-tight">Egyptian Stock Valuation</p>
+            <p className="text-[10px] text-muted-foreground leading-tight">Stock Valuation Platform</p>
           </div>
         </div>
       </SidebarHeader>
@@ -117,12 +117,16 @@ export function AppSidebar({
           <SidebarGroupContent>
             <div className="space-y-2 px-2 group-data-[collapsible=icon]:hidden">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Stocks</span>
+                <span className="text-muted-foreground">Stocks Tracked</span>
                 <span className="font-mono font-medium">{stocksCount}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">Sectors</span>
                 <span className="font-mono font-medium">{sectorsCount}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Valuation Models</span>
+                <span className="font-mono font-medium">8</span>
               </div>
             </div>
           </SidebarGroupContent>
@@ -139,7 +143,7 @@ export function AppSidebar({
             className="h-8 gap-2 text-xs flex-1"
           >
             <RefreshCw className={`h-3 w-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-            <span className="group-data-[collapsible=icon]:hidden">Refresh</span>
+            <span className="group-data-[collapsible=icon]:hidden">Refresh Data</span>
           </Button>
           <ThemeToggle />
         </div>

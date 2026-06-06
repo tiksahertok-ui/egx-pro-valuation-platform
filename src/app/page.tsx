@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Star } from 'lucide-react';
+import { BarChart3, Star, Sun, Moon } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useStocks, useStockDetail, useSectors, useRefreshData } from '@/lib/api-hooks';
 import { AppSidebar } from '@/components/app-sidebar';
 import { DashboardPage } from '@/components/dashboard-page';
@@ -13,6 +14,34 @@ import { StockDetailPage, StockDetailSkeleton } from '@/components/stock-detail-
 import { SectorsPage } from '@/components/sectors-page';
 import { WatchlistPage, useWatchlist } from '@/components/watchlist-page';
 import type { StockData, SectorData, PageView } from '@/lib/types';
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    requestAnimationFrame(() => setMounted(true));
+  }, []);
+
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+        <Sun className="w-4 h-4" />
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 w-7 p-0"
+      onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+    >
+      {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+    </Button>
+  );
+}
 
 export default function EGXProPlatform() {
   const [activeView, setActiveView] = useState<PageView>('dashboard');
@@ -47,6 +76,14 @@ export default function EGXProPlatform() {
     }
   };
 
+  const viewLabel: Record<PageView, string> = {
+    dashboard: 'Dashboard',
+    stocks: 'All Stocks',
+    sectors: 'Sectors',
+    watchlist: 'Watchlist',
+    'stock-detail': stockDetail?.stock?.name || selectedTicker || 'Stock Detail',
+  };
+
   return (
     <SidebarProvider defaultOpen>
       <AppSidebar
@@ -62,14 +99,20 @@ export default function EGXProPlatform() {
         <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border/50 px-4">
           <SidebarTrigger className="-ml-1 h-7 w-7" />
           <Separator orientation="vertical" className="mr-2 h-4" />
+          <div className="flex items-center gap-2">
+            <div className="flex h-5 w-5 items-center justify-center rounded bg-emerald-600 text-white">
+              <BarChart3 className="h-3 w-3" />
+            </div>
+            <span className="text-xs font-bold tracking-tight text-foreground">EGX Pro</span>
+          </div>
+          <Separator orientation="vertical" className="mx-2 h-4" />
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>EGX</span>
-            <span className="text-border">/</span>
             <span className="font-medium text-foreground capitalize">
-              {activeView === 'stock-detail' ? stockDetail?.stock?.name || selectedTicker : activeView}
+              {viewLabel[activeView]}
             </span>
           </div>
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
+            <ThemeToggle />
             {selectedTicker && activeView === 'stock-detail' && (
               <Button
                 variant="ghost"

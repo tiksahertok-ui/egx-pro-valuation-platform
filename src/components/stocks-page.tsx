@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, ChevronDown, ChevronUp, Eye } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Eye, Shield } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,45 @@ interface StocksPageProps {
   onSelectStock: (ticker: string) => void;
 }
 
+// Compute Graham Number from stock data
+function computeGrahamNumber(stock: StockData): { graham: number; upside: number; verdict: string } {
+  const eps = stock.eps || 0;
+  const bvps = stock.bookValuePerShare || 0;
+  const price = stock.price || 0;
+
+  // Graham Number = sqrt(15 × EPS × BVPS) for Egypt
+  const graham = (eps > 0 && bvps > 0) ? Math.sqrt(15 * eps * bvps) : 0;
+  const upside = price > 0 && graham > 0 ? ((graham - price) / price) * 100 : 0;
+
+  let verdict = 'Fair';
+  if (upside > 15) verdict = 'Undervalued';
+  else if (upside < -15) verdict = 'Overvalued';
+
+  return { graham, upside, verdict };
+}
+
+function VerdictBadge({ verdict }: { verdict: string }) {
+  if (verdict === 'Undervalued') {
+    return (
+      <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 border font-medium">
+        Undervalued
+      </Badge>
+    );
+  }
+  if (verdict === 'Overvalued') {
+    return (
+      <Badge className="text-[10px] bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20 border font-medium">
+        Overvalued
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 border font-medium">
+      Fair
+    </Badge>
+  );
+}
+
 export function StocksPage({ stocks, isLoading, onSelectStock }: StocksPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSector, setSelectedSector] = useState('all');
@@ -36,6 +75,15 @@ export function StocksPage({ stocks, isLoading, onSelectStock }: StocksPageProps
   const uniqueSectors = useMemo(() => {
     const s = new Set(stocks.map(st => st.sector));
     return Array.from(s).sort();
+  }, [stocks]);
+
+  // Precompute Graham numbers for all stocks
+  const grahamMap = useMemo(() => {
+    const map = new Map<string, { graham: number; upside: number; verdict: string }>();
+    stocks.forEach(s => {
+      map.set(s.ticker, computeGrahamNumber(s));
+    });
+    return map;
   }, [stocks]);
 
   const filteredStocks = useMemo(() => {
@@ -55,13 +103,22 @@ export function StocksPage({ stocks, isLoading, onSelectStock }: StocksPageProps
     }
 
     result.sort((a, b) => {
-      const aVal = (a as Record<string, unknown>)[sortBy] as number || 0;
-      const bVal = (b as Record<string, unknown>)[sortBy] as number || 0;
+      let aVal: number, bVal: number;
+      if (sortBy === 'graham') {
+        aVal = grahamMap.get(a.ticker)?.graham || 0;
+        bVal = grahamMap.get(b.ticker)?.graham || 0;
+      } else if (sortBy === 'upside') {
+        aVal = grahamMap.get(a.ticker)?.upside || 0;
+        bVal = grahamMap.get(b.ticker)?.upside || 0;
+      } else {
+        aVal = (a as Record<string, unknown>)[sortBy] as number || 0;
+        bVal = (b as Record<string, unknown>)[sortBy] as number || 0;
+      }
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
     });
 
     return result;
-  }, [stocks, searchQuery, selectedSector, sortBy, sortDir]);
+  }, [stocks, searchQuery, selectedSector, sortBy, sortDir, grahamMap]);
 
   const handleSort = (field: string) => {
     if (sortBy === field) {
@@ -142,10 +199,19 @@ export function StocksPage({ stocks, isLoading, onSelectStock }: StocksPageProps
                   <TableHead className="cursor-pointer text-xs hidden lg:table-cell" onClick={() => handleSort('marketCap')}>
                     Mkt Cap {renderSortIcon('marketCap')}
                   </TableHead>
-                  <TableHead className="cursor-pointer text-xs hidden sm:table-cell" onClick={() => handleSort('dividendYield')}>
+                  <TableHead className="cursor-pointer text-xs hidden sm:table-cell" onClick={() => handleSort('graham')}>
+                    <span className="flex items-center gap-1">
+                      <Shield className="w-3 h-3 text-emerald-500" />
+                      Graham FV {renderSortIcon('graham')}
+                    </span>
+                  </TableHead>
+                  <TableHead className="cursor-pointer text-xs hidden sm:table-cell" onClick={() => handleSort('upside')}>
+                    Verdict {renderSortIcon('upside')}
+                  </TableHead>
+                  <TableHead className="cursor-pointer text-xs hidden lg:table-cell" onClick={() => handleSort('dividendYield')}>
                     Div Yield {renderSortIcon('dividendYield')}
                   </TableHead>
-                  <TableHead className="text-xs hidden lg:table-cell">Sector</TableHead>
+                  <TableHead className="text-xs hidden xl:table-cell">Sector</TableHead>
                   <TableHead className="w-10"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -153,57 +219,70 @@ export function StocksPage({ stocks, isLoading, onSelectStock }: StocksPageProps
                 {isLoading ? (
                   Array.from({ length: 15 }).map((_, i) => (
                     <TableRow key={i} className="border-border/30">
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 11 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-16" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : filteredStocks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-sm">
+                    <TableCell colSpan={11} className="text-center py-12 text-muted-foreground text-sm">
                       No stocks found matching your criteria
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredStocks.map(s => (
-                    <TableRow
-                      key={s.ticker}
-                      className="cursor-pointer hover:bg-accent/30 transition-colors border-border/30 group"
-                      onClick={() => onSelectStock(s.ticker)}
-                    >
-                      <TableCell className="font-bold font-mono text-emerald-600 dark:text-emerald-400 text-xs">
-                        {s.ticker}
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-xs font-medium truncate max-w-[140px]">{s.name}</p>
-                      </TableCell>
-                      <TableCell className="font-mono font-medium text-xs">
-                        {s.price > 0 ? formatPrice(s.price) : '—'}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell font-mono text-xs">
-                        {s.peRatio > 0 ? s.peRatio.toFixed(1) : '—'}
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell font-mono text-xs">
-                        {s.pbRatio > 0 ? s.pbRatio.toFixed(2) : '—'}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell font-mono text-xs">
-                        {s.marketCap > 0 ? formatMarketCap(s.marketCap) : '—'}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell font-mono text-xs">
-                        {s.dividendYield > 0 ? (s.dividendYield * 100).toFixed(1) + '%' : '—'}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        <Badge variant="outline" className="text-[10px] font-normal border-border/50">
-                          {s.sector}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <Eye className="w-3 h-3" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                  filteredStocks.map(s => {
+                    const g = grahamMap.get(s.ticker);
+                    return (
+                      <TableRow
+                        key={s.ticker}
+                        className="cursor-pointer hover:bg-accent/30 transition-colors border-border/30 group"
+                        onClick={() => onSelectStock(s.ticker)}
+                      >
+                        <TableCell className="font-bold font-mono text-emerald-600 dark:text-emerald-400 text-xs">
+                          {s.ticker}
+                        </TableCell>
+                        <TableCell>
+                          <p className="text-xs font-medium truncate max-w-[140px]">{s.name}</p>
+                        </TableCell>
+                        <TableCell className="font-mono font-medium text-xs">
+                          {s.price > 0 ? formatPrice(s.price) : '—'}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-xs">
+                          {s.peRatio > 0 ? s.peRatio.toFixed(1) : '—'}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-xs">
+                          {s.pbRatio > 0 ? s.pbRatio.toFixed(2) : '—'}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell font-mono text-xs">
+                          {s.marketCap > 0 ? formatMarketCap(s.marketCap) : '—'}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell font-mono text-xs font-medium">
+                          {g && g.graham > 0 ? (
+                            <span className={g.upside > 0 ? 'text-emerald-500' : g.upside < -15 ? 'text-red-500' : 'text-amber-500'}>
+                              {formatPrice(g.graham)}
+                            </span>
+                          ) : '—'}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell">
+                          {g && g.graham > 0 ? <VerdictBadge verdict={g.verdict} /> : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell font-mono text-xs">
+                          {s.dividendYield > 0 ? (s.dividendYield * 100).toFixed(1) + '%' : '—'}
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <Badge variant="outline" className="text-[10px] font-normal border-border/50">
+                            {s.sector}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Eye className="w-3 h-3" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

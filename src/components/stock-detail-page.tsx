@@ -31,6 +31,52 @@ interface StockDetailPageProps {
   onBack: () => void;
 }
 
+// Value Gauge Component - visual thermometer for upside/downside
+function ValueGauge({ upside, verdict }: { upside: number; verdict: string }) {
+  // Map upside to a 0-100 scale: -50% -> 0, 0% -> 50, +50% -> 100
+  const clampedUpside = Math.max(-50, Math.min(50, upside));
+  const gaugePosition = ((clampedUpside + 50) / 100) * 100;
+
+  let gaugeColor = 'bg-amber-500';
+  let gaugeBg = 'from-amber-500/10';
+  let labelColor = 'text-amber-500';
+
+  if (verdict === 'undervalued' || verdict === 'buy' || verdict === 'strong_buy') {
+    gaugeColor = 'bg-emerald-500';
+    gaugeBg = 'from-emerald-500/10';
+    labelColor = 'text-emerald-500';
+  } else if (verdict === 'overvalued' || verdict === 'sell' || verdict === 'strong_sell') {
+    gaugeColor = 'bg-red-500';
+    gaugeBg = 'from-red-500/10';
+    labelColor = 'text-red-500';
+  }
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+        <span>Overvalued</span>
+        <span>Fair Value</span>
+        <span>Undervalued</span>
+      </div>
+      <div className="relative h-3 bg-muted rounded-full overflow-hidden">
+        <div className="absolute h-full w-full bg-gradient-to-r from-red-500/30 via-amber-500/30 to-emerald-500/30 rounded-full" />
+        <div
+          className={`absolute h-2 w-2 ${gaugeColor} rounded-full top-0.5 -translate-x-1/2 transition-all duration-500 shadow-lg`}
+          style={{ left: `${Math.min(Math.max(gaugePosition, 3), 97)}%` }}
+        />
+        {/* Center line */}
+        <div className="absolute h-full w-px bg-foreground/20 left-1/2" />
+      </div>
+      <div className="text-center mt-2">
+        <span className={`text-lg font-bold font-mono ${labelColor}`}>
+          {upside > 0 ? '+' : ''}{upside.toFixed(1)}%
+        </span>
+        <span className="text-xs text-muted-foreground ml-1">upside</span>
+      </div>
+    </div>
+  );
+}
+
 export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
   const { stock, valuation, sectorAvg } = detail;
   const priceHistory = stock.priceHistory || [];
@@ -74,6 +120,18 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
     ? ((stock.price - stock.fiftyTwoWeekLow) / (stock.fiftyTwoWeekHigh - stock.fiftyTwoWeekLow)) * 100
     : 0;
 
+  // Get overall verdict for gauge
+  const overallUpside = grahamModel?.upsideDownside || valuation?.averageUpside || 0;
+  const overallVerdict = grahamModel?.verdict || valuation?.overallVerdict || 'fair';
+
+  // Color for the fair value section
+  const fvBorderColor = overallVerdict === 'undervalued' || overallVerdict === 'buy' || overallVerdict === 'strong_buy'
+    ? 'border-emerald-500/30' : overallVerdict === 'overvalued' || overallVerdict === 'sell' || overallVerdict === 'strong_sell'
+    ? 'border-red-500/30' : 'border-amber-500/30';
+  const fvBgColor = overallVerdict === 'undervalued' || overallVerdict === 'buy' || overallVerdict === 'strong_buy'
+    ? 'bg-emerald-500/5' : overallVerdict === 'overvalued' || overallVerdict === 'sell' || overallVerdict === 'strong_sell'
+    ? 'bg-red-500/5' : 'bg-amber-500/5';
+
   return (
     <div className="space-y-6 p-6">
       {/* Header */}
@@ -92,7 +150,7 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
             </Badge>
           </div>
           <div className="flex items-center gap-4 mt-2 flex-wrap">
-            <span className="text-3xl font-bold font-mono">{stock.price > 0 ? formatPrice(stock.price) : '—'}</span>
+            <span className="text-3xl font-bold font-mono">{stock.price > 0 ? formatPrice(stock.price) : 'No data available'}</span>
             {stock.marketCap > 0 && (
               <span className="text-sm text-muted-foreground font-mono">
                 Mkt Cap: {formatMarketCap(stock.marketCap)}
@@ -140,13 +198,13 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
         </Card>
       )}
 
-      {/* Fair Value Section - CRITICAL */}
+      {/* Fair Value Section - PROMINENT */}
       {valuation && (
-        <Card className="border-emerald-500/20 bg-emerald-500/5 backdrop-blur-sm">
+        <Card className={`border-2 ${fvBorderColor} ${fvBgColor} backdrop-blur-sm`}>
           <CardHeader className="pb-3 px-4 pt-4">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Target className="w-4 h-4 text-emerald-500" />
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Target className="w-5 h-5 text-emerald-500" />
                 Fair Value Estimate
               </CardTitle>
               {valuation.confidenceScore > 0 && (
@@ -161,31 +219,31 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
             </div>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            {/* Graham Number - Prominent Display */}
+            {/* Graham Number - Very Prominent Display */}
             {grahamModel && (
-              <div className="mb-4 p-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <Shield className="w-5 h-5 text-emerald-500" />
-                  <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">Graham Number</span>
+              <div className="mb-5 p-5 rounded-xl border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-transparent">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-6 h-6 text-emerald-500" />
+                  <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">Graham Number</span>
                   <Badge className={`text-[10px] border ${getVerdictBg(grahamModel.verdict)}`}>
                     {getVerdictLabel(grahamModel.verdict)}
                   </Badge>
                 </div>
-                <div className="flex items-baseline gap-3">
-                  <span className="text-3xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-baseline gap-3 mb-3">
+                  <span className="text-4xl font-bold font-mono text-emerald-600 dark:text-emerald-400">
                     {formatPrice(grahamModel.fairValue)}
                   </span>
-                  <span className={`text-sm font-mono font-medium ${getVerdictColor(grahamModel.verdict)}`}>
+                  <span className={`text-lg font-mono font-bold ${getVerdictColor(grahamModel.verdict)}`}>
                     {grahamModel.upsideDownside > 0 ? '+' : ''}{grahamModel.upsideDownside.toFixed(1)}%
-                    {grahamModel.upsideDownside > 0 ? <TrendingUp className="w-3 h-3 inline ml-1" /> :
-                     grahamModel.upsideDownside < 0 ? <TrendingDown className="w-3 h-3 inline ml-1" /> :
-                     <Minus className="w-3 h-3 inline ml-1" />}
+                    {grahamModel.upsideDownside > 0 ? <TrendingUp className="w-4 h-4 inline ml-1" /> :
+                     grahamModel.upsideDownside < 0 ? <TrendingDown className="w-4 h-4 inline ml-1" /> :
+                     <Minus className="w-4 h-4 inline ml-1" />}
                   </span>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mb-2">
                   {MODEL_DESCRIPTIONS['graham']}
                 </p>
-                <div className="flex gap-4 mt-2 text-[10px] text-muted-foreground font-mono">
+                <div className="flex gap-4 text-[10px] text-muted-foreground font-mono">
                   {Object.entries(grahamModel.assumptions).map(([k, v]) => (
                     <span key={k}>{k}: {typeof v === 'number' ? v.toFixed(2) : v}</span>
                   ))}
@@ -193,20 +251,27 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
               </div>
             )}
 
-            {/* Overall Verdict */}
+            {/* Value Gauge - Visual Thermometer */}
+            <div className="mb-5 p-4 rounded-lg border border-border/50 bg-card/80">
+              <ValueGauge upside={overallUpside} verdict={overallVerdict} />
+            </div>
+
+            {/* Overall Verdict Cards */}
             {showFairValue && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-                <div className="p-3 rounded-lg border border-border/50 bg-card/80">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Average Fair Value</p>
-                  <p className="text-lg font-bold font-mono">{formatPrice(valuation.averageFairValue)}</p>
+                <div className="p-4 rounded-lg border border-border/50 bg-card/80">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Average Fair Value</p>
+                  <p className="text-xl font-bold font-mono">{formatPrice(valuation.averageFairValue)}</p>
                 </div>
-                <div className="p-3 rounded-lg border border-border/50 bg-card/80">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Median Fair Value</p>
-                  <p className="text-lg font-bold font-mono">{formatPrice(valuation.medianFairValue)}</p>
+                <div className="p-4 rounded-lg border border-border/50 bg-card/80">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Median Fair Value</p>
+                  <p className="text-xl font-bold font-mono">{formatPrice(valuation.medianFairValue)}</p>
                 </div>
-                <div className="p-3 rounded-lg border border-border/50 bg-card/80">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Overall Verdict</p>
-                  <p className="text-lg font-bold">{getOverallVerdictLabel(valuation.overallVerdict)}</p>
+                <div className="p-4 rounded-lg border border-border/50 bg-card/80">
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Overall Verdict</p>
+                  <p className={`text-xl font-bold ${getVerdictColor(valuation.overallVerdict)}`}>
+                    {getOverallVerdictLabel(valuation.overallVerdict)}
+                  </p>
                 </div>
               </div>
             )}
@@ -260,6 +325,17 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* No valuation available message */}
+      {!valuation && (
+        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-8 text-center">
+            <Info className="w-8 h-8 mx-auto mb-2 text-muted-foreground opacity-30" />
+            <p className="text-sm font-medium">Valuation data not available</p>
+            <p className="text-xs text-muted-foreground mt-1">Click &quot;Refresh&quot; to fetch latest data and generate valuations</p>
           </CardContent>
         </Card>
       )}

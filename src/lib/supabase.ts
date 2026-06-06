@@ -6,25 +6,53 @@
  * Note: If SUPABASE_SERVICE_ROLE_KEY is not a real service role key
  * (e.g., same as the anon/publishable key), queries may fail due to RLS.
  * All API routes must handle Supabase failures gracefully with fallbacks.
+ *
+ * Vercel Deployment: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+ * must be set as environment variables in Vercel project settings.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-key'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-})
+// Create client only if both URL and key are available
+// Otherwise create a dummy client that will gracefully fail on queries
+let supabaseClient: SupabaseClient
+
+if (supabaseUrl && supabaseKey && supabaseUrl !== '' && supabaseKey !== '') {
+  supabaseClient = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+} else {
+  // Create a placeholder client that won't crash the app
+  // All queries will fail gracefully and fallback to hardcoded data
+  supabaseClient = createClient('https://placeholder.supabase.co', 'placeholder-key', {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
+export const supabase = supabaseClient
+
+/**
+ * Check if Supabase is properly configured with real credentials
+ */
+export function isSupabaseConfigured(): boolean {
+  return !!(supabaseUrl && supabaseKey && !supabaseUrl.includes('placeholder'))
+}
 
 /**
  * Check if Supabase is reachable and queries can succeed.
  * Returns true if a simple query works, false otherwise.
  */
 export async function isSupabaseReachable(): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false
   try {
     const { error } = await supabase
       .from('Stock')
