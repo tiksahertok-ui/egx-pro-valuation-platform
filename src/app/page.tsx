@@ -145,7 +145,7 @@ export default function EGXProPlatform() {
 
         {/* Footer */}
         <footer className="border-t border-border/50 py-3 px-4">
-          <div className="text-center text-[10px] text-muted-foreground/60">
+          <div className="text-center text-xs text-muted-foreground/60">
             EGX Pro - Egyptian Stock Valuation Platform | All data for educational purposes only
           </div>
         </footer>
