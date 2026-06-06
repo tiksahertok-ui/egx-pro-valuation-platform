@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo } from 'react';
-import { TrendingUp, TrendingDown, DollarSign, Activity, BarChart3, ArrowUpRight, Info, Globe, Shield, PieChart } from 'lucide-react';
-import { LineChart, Line, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { TrendingUp, TrendingDown, DollarSign, Activity, BarChart3, ArrowUpRight, Info, Globe, Shield, PieChart, Target } from 'lucide-react';
+import { LineChart, Line, PieChart as RechartsPie, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ScatterChart, Scatter, ReferenceLine, CartesianGrid } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +59,45 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
       .filter(s => s.price > 0)
       .sort((a, b) => (b.marketCap || 0) - (a.marketCap || 0))
       .slice(0, 12);
+  }, [stocks]);
+
+  // CBE Rate History data
+  const cbeRateData = useMemo(() => {
+    return [
+      { date: 'Jan 24', rate: 27.25 },
+      { date: 'Mar 24', rate: 27.25 },
+      { date: 'Jun 24', rate: 27.25 },
+      { date: 'Sep 24', rate: 25.75 },
+      { date: 'Nov 24', rate: 25.00 },
+      { date: 'Jan 25', rate: 23.25 },
+      { date: 'Mar 25', rate: 21.25 },
+      { date: 'Jun 25', rate: 20.00 },
+      { date: 'Sep 25', rate: 19.50 },
+      { date: 'Feb 26', rate: 19.00 },
+    ];
+  }, []);
+
+  // Fair Value vs. Market Price Scatter Plot data
+  const scatterData = useMemo(() => {
+    return stocks
+      .filter(s => s.price > 0 && s.marketCap > 0)
+      .map(s => {
+        const eps = s.eps || 0;
+        const bvps = s.bookValuePerShare || 0;
+        const graham = (eps > 0 && bvps > 0) ? Math.sqrt(15 * eps * bvps) : 0;
+        const peBased = eps > 0 ? eps * 8.5 : 0;
+        const values = [graham, peBased].filter(v => v > 0);
+        const fairValue = values.length > 0 ? values.reduce((a, b) => a + b) / values.length : 0;
+        const upside = fairValue > 0 ? ((fairValue - s.price) / s.price) * 100 : 0;
+        return {
+          ticker: s.ticker,
+          marketPrice: s.price,
+          fairValue,
+          upside,
+          fill: upside > 10 ? '#10b981' : upside < -10 ? '#ef4444' : '#f59e0b',
+        };
+      })
+      .filter(d => d.fairValue > 0);
   }, [stocks]);
 
   if (isLoading) {
@@ -262,6 +301,37 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
         </Card>
       </div>
 
+      {/* CBE Rate History */}
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <CardHeader className="pb-3 px-4 pt-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Activity className="w-4 h-4 text-emerald-500" />
+            CBE Rate History
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart data={cbeRateData}>
+              <XAxis dataKey="date" tick={{ fontSize: 9 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis domain={[17, 29]} tick={{ fontSize: 9 }} stroke="hsl(var(--muted-foreground))" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                }}
+                formatter={(value: number) => [`${value.toFixed(2)}%`, 'CBE Rate']}
+              />
+              <Line type="monotone" dataKey="rate" stroke="#10b981" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+          <div className="text-center mt-1">
+            <span className="text-[10px] text-muted-foreground">Current: 19.00% (May 2026)</span>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Featured Stocks */}
       <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
         <CardHeader className="pb-3 px-4 pt-4">
@@ -303,6 +373,67 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
                 )}
               </button>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fair Value vs. Market Price Scatter Plot */}
+      <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+        <CardHeader className="pb-3 px-4 pt-4">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <Target className="w-4 h-4 text-emerald-500" />
+            Fair Value vs. Market Price
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          {scatterData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <ScatterChart>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <XAxis type="number" dataKey="marketPrice" name="Market Price" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Market Price (EGP)', position: 'insideBottom', offset: -2, fontSize: 10 }} />
+                <YAxis type="number" dataKey="fairValue" name="Fair Value" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" label={{ value: 'Fair Value (EGP)', angle: -90, position: 'insideLeft', fontSize: 10 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                    fontSize: '11px',
+                  }}
+                  formatter={(value: number, name: string) => [`EGP ${value.toFixed(2)}`, name]}
+                  labelFormatter={(_, payload) => {
+                    if (payload && payload.length > 0) {
+                      const data = payload[0].payload as { ticker: string; upside: number };
+                      return `${data.ticker} (${data.upside > 0 ? '+' : ''}${data.upside.toFixed(1)}%)`;
+                    }
+                    return '';
+                  }}
+                />
+                <ReferenceLine slope={1} stroke="hsl(var(--muted-foreground))" strokeDasharray="5 5" />
+                <Scatter data={scatterData} fill="#10b981">
+                  {scatterData.map((entry, index) => (
+                    <Cell key={index} fill={entry.fill} />
+                  ))}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p className="text-xs">No valuation data available</p>
+            </div>
+          )}
+          <div className="flex items-center justify-center gap-4 mt-2">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-[10px] text-muted-foreground">Undervalued {'>'}10%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <span className="text-[10px] text-muted-foreground">Fair Value ±10%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-red-500" />
+              <span className="text-[10px] text-muted-foreground">Overvalued {'>'}10%</span>
+            </div>
           </div>
         </CardContent>
       </Card>

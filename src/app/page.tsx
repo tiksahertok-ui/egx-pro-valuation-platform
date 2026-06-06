@@ -186,10 +186,10 @@ export default function EGXProPlatform() {
           )}
         </div>
 
-        {/* Footer */}
-        <footer className="border-t border-border/50 py-3 px-4">
-          <div className="text-center text-xs text-muted-foreground/60">
-            EGX Pro - Egyptian Stock Valuation Platform | All data for educational purposes only
+        {/* Disclaimer Footer */}
+        <footer className="sticky bottom-0 border-t border-amber-500/20 bg-amber-500/5 backdrop-blur-sm py-2 px-4 z-50">
+          <div className="text-center text-[10px] text-amber-600 dark:text-amber-400/80 font-medium">
+            ⚠ Disclaimer: This platform is for informational purposes only and does not constitute investment advice. Data may be delayed or estimated.
           </div>
         </footer>
       </SidebarInset>

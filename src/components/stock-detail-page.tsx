@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Target, Calculator, Activity, BarChart3, Info } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Accordion, AccordionContent, AccordionItem, AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import {
   formatPrice, formatMarketCap, formatNumber, safeToFixed,
   getVerdictLabel, getVerdictColor, getVerdictBg,
@@ -74,6 +75,88 @@ function ValueGauge({ upside, verdict }: { upside: number; verdict: string }) {
         <span className="text-xs text-muted-foreground ml-1">upside</span>
       </div>
     </div>
+  );
+}
+
+// WACC Sensitivity Table Component
+function WACCSensitivityTable({ valuation, currentPrice }: { valuation: { averageFairValue: number; models: Array<{ model: string; fairValue: number; assumptions: Record<string, number | string> }> }, currentPrice: number }) {
+  // Get DCF model's WACC if available
+  const dcfModel = valuation.models.find(m => m.model === 'dcf');
+  const waccStr = dcfModel?.assumptions?.wacc as string;
+  const baseWacc = waccStr ? parseFloat(waccStr.replace('%', '')) / 100 : 0.19;
+  const baseGrowth = 0.025; // ~2.5% terminal growth
+
+  // Compute sensitivity matrix
+  const waccShifts = [-0.02, -0.01, 0, 0.01, 0.02]; // ±2%, ±1%, base
+  const growthShifts = [-0.01, 0, 0.01]; // -1%, base, +1%
+
+  const computeSensitivityFairValue = (waccDelta: number, growthDelta: number): number => {
+    const adjWacc = baseWacc + waccDelta;
+    const adjGrowth = Math.max(0, baseGrowth + growthDelta);
+    if (adjWacc <= adjGrowth) return 0; // avoid division by zero
+    // Simple perpetuity-based adjustment: FV ≈ baseFV * (baseWacc - baseGrowth) / (adjWacc - adjGrowth)
+    const baseDenom = baseWacc - baseGrowth;
+    const adjDenom = adjWacc - adjGrowth;
+    if (baseDenom <= 0 || adjDenom <= 0) return 0;
+    return valuation.averageFairValue * (baseDenom / adjDenom);
+  };
+
+  const formatSensitivityValue = (fv: number): { text: string; className: string } => {
+    if (fv <= 0) return { text: '—', className: 'text-muted-foreground' };
+    const upside = ((fv - currentPrice) / currentPrice) * 100;
+    return {
+      text: fv.toFixed(0),
+      className: upside > 10 ? 'text-emerald-500' : upside < -10 ? 'text-red-500' : 'text-amber-500',
+    };
+  };
+
+  return (
+    <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
+      <CardHeader className="pb-3 px-4 pt-4">
+        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+          <Target className="w-4 h-4 text-emerald-500" />
+          WACC Sensitivity Analysis
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 pb-4">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono">
+            <thead>
+              <tr className="border-b border-border/50">
+                <th className="py-2 px-2 text-left text-muted-foreground">WACC ↓ / Growth →</th>
+                {growthShifts.map((g, i) => (
+                  <th key={i} className="py-2 px-3 text-center text-muted-foreground">
+                    {((baseGrowth + g) * 100).toFixed(1)}%
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {waccShifts.map((w, wi) => (
+                <tr key={wi} className={`border-b border-border/20 ${w === 0 ? 'bg-emerald-500/5' : ''}`}>
+                  <td className={`py-2 px-2 ${w === 0 ? 'font-bold text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                    {((baseWacc + w) * 100).toFixed(1)}%{w === 0 ? ' ←' : ''}
+                  </td>
+                  {growthShifts.map((g, gi) => {
+                    const fv = computeSensitivityFairValue(w, g);
+                    const { text, className } = formatSensitivityValue(fv);
+                    return (
+                      <td key={gi} className={`py-2 px-3 text-center font-medium ${className}`}>
+                        {text}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-muted-foreground mt-2">
+          Values represent estimated fair value (EGP) under different WACC and terminal growth rate assumptions.
+          Base case highlighted in green.
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -299,6 +382,22 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
                                 Key
                               </Badge>
                             )}
+                            {model.assumptions?.sectorConfidence === 'HIGH' ? (
+                              <Badge className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+                                HIGH
+                              </Badge>
+                            ) : model.assumptions?.sectorConfidence === 'LOW' ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Badge className="text-[9px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 cursor-help">
+                                    LOW
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[220px] text-[10px]">
+                                  This model may not be appropriate for this sector. See sector-specific weights.
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : null}
                             <Badge className={`text-[9px] border ${getVerdictBg(model.verdict)}`}>
                               {getVerdictLabel(model.verdict)}
                             </Badge>
@@ -340,6 +439,11 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
         </Card>
       )}
 
+      {/* WACC Sensitivity Analysis */}
+      {valuation && (
+        <WACCSensitivityTable valuation={valuation} currentPrice={stock.price} />
+      )}
+
       {/* Price Chart & Volume */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
@@ -356,7 +460,7 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                   <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} />
-                  <Tooltip
+                  <RechartsTooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',
@@ -405,7 +509,7 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                   <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                  <Tooltip
+                  <RechartsTooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
                       border: '1px solid hsl(var(--border))',

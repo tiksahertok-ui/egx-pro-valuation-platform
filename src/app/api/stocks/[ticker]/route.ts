@@ -3,6 +3,9 @@ import { supabase, type SupabaseStock, type SupabaseFinancialData, type Supabase
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
 import { getFinancialDataByTicker, getHardcodedSectorAverages } from '@/lib/data/egx-financial-data';
 import { runAllModels, type StockFundamentals, type SectorAverages, DEFAULT_MARKET_PARAMS } from '@/lib/valuation-engine';
+import { z } from 'zod/v4';
+
+const TickerSchema = z.string().min(1).max(10).regex(/^[A-Za-z0-9]+$/);
 
 export const dynamic = 'force-dynamic';
 
@@ -74,6 +77,12 @@ export async function GET(
   { params }: { params: Promise<{ ticker: string }> }
 ) {
   const { ticker } = await params;
+
+  // Validate ticker format
+  const validation = TickerSchema.safeParse(ticker);
+  if (!validation.success) {
+    return NextResponse.json({ error: 'Invalid ticker format' }, { status: 400 });
+  }
 
   try {
     // Get stock from Supabase
@@ -323,9 +332,12 @@ export async function GET(
           profitMargin: latestFinancial?.profitMargin || 0,
           revenueGrowth: latestFinancial?.revenueGrowth || 0,
           earningsGrowth: latestFinancial?.earningsGrowth || 0,
+          usdRevenuePct: (finData?.usdRevenuePct ?? 0) || 0,
+          cashEquivalents: latestFinancial?.totalAssets ? (latestFinancial.totalAssets - latestFinancial.totalEquity - latestFinancial.totalDebt) : 0,
+          minorityInterests: 0,
         };
 
-        valuation = runAllModels(fundamentals, sectorAvg, DEFAULT_MARKET_PARAMS);
+        valuation = runAllModels(fundamentals, sectorAvg, DEFAULT_MARKET_PARAMS, stock.sector);
       } catch (valErr) {
         console.warn('Valuation computation failed:', valErr);
       }

@@ -5,6 +5,9 @@
  * All models return: { fairValue, upsideDownside, confidence, assumptions }
  */
 
+import { getSectorWeights, isModelSectorAppropriate } from './valuation/sector-weights';
+import { calcNAV } from './valuation/nav-model';
+
 // ============================================================
 // Types
 // ============================================================
@@ -36,6 +39,9 @@ export interface StockFundamentals {
   profitMargin: number;
   revenueGrowth: number;
   earningsGrowth: number;
+  usdRevenuePct?: number;    // 0-1, percentage of USD-denominated revenue
+  cashEquivalents?: number;   // cash and cash equivalents
+  minorityInterests?: number; // minority interests
 }
 
 export interface SectorAverages {
@@ -51,6 +57,7 @@ export interface MarketParams {
   equityRiskPremium: number; // e.g. 0.08 (8%)
   inflationRate: number;    // e.g. 0.30 (30%)
   gdpGrowthRate: number;    // e.g. 0.05 (5%)
+  usdegpRate?: number;      // USD/EGP exchange rate
 }
 
 export interface ValuationResult {
@@ -62,6 +69,7 @@ export interface ValuationResult {
   confidence: number; // 0 to 1
   assumptions: Record<string, number | string>;
   verdict: 'undervalued' | 'fair' | 'overvalued';
+  terminalGrowthCapped: boolean;
 }
 
 export interface ComprehensiveValuation {
@@ -80,10 +88,11 @@ export interface ComprehensiveValuation {
 // ============================================================
 
 export const DEFAULT_MARKET_PARAMS: MarketParams = {
-  riskFreeRate: 0.18,        // CBE overnight deposit rate ~18%
-  equityRiskPremium: 0.08,   // Emerging market ERP
-  inflationRate: 0.30,       // Egypt inflation ~30%
+  riskFreeRate: 0.19,        // CBE overnight deposit rate = 19.0% (May 2026)
+  equityRiskPremium: 0.085,  // Egypt equity risk premium = 8.5%
+  inflationRate: 0.134,      // Annual CPI inflation = 13.4% (Feb 2026)
   gdpGrowthRate: 0.05,       // Real GDP growth ~5%
+  usdegpRate: 51.89,         // USD/EGP exchange rate
 };
 
 export const DEFAULT_SECTOR_AVERAGES: SectorAverages = {
@@ -120,12 +129,23 @@ function formatPercent(value: number): string {
 // Model 1: DCF (Discounted Cash Flow)
 // ============================================================
 
-function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   const fcf = fundamentals.freeCashflow || (fundamentals.operatingCashflow * 0.7) || 0;
   const wacc = calculateWACC(fundamentals, params);
   const growthRate = Math.min(fundamentals.revenueGrowth || params.gdpGrowthRate, 0.15);
   const terminalGrowth = Math.min(params.gdpGrowthRate * 0.5, 0.03);
+
+  // Terminal growth rate guard: ensure g < WACC - 1%
+  const safeG = Math.min(terminalGrowth, wacc - 0.01);
+  const terminalGrowthCapped = safeG < terminalGrowth;
+  const effectiveTerminalGrowth = Math.max(safeG, 0);
+
   const projectionYears = 10;
+
+  // FX normalization for USD-denominated revenue
+  const usdPct = fundamentals.usdRevenuePct ?? 0;
+  const usdegpRate = params.usdegpRate ?? 51.89;
+  const effectiveRevenue = fundamentals.revenue * ((1 - usdPct) + usdPct * usdegpRate);
 
   let pvFCF = 0;
   let projectedFCF = fcf;
@@ -136,7 +156,7 @@ function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
   }
 
   // Terminal Value
-  const terminalValue = (projectedFCF * (1 + terminalGrowth)) / (wacc - terminalGrowth);
+  const terminalValue = (projectedFCF * (1 + effectiveTerminalGrowth)) / (wacc - effectiveTerminalGrowth);
   const pvTerminalValue = terminalValue / Math.pow(1 + wacc, projectionYears);
 
   const enterpriseValue = pvFCF + pvTerminalValue;
@@ -156,11 +176,15 @@ function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
     assumptions: {
       wacc: formatPercent(wacc),
       growthRate: formatPercent(growthRate),
-      terminalGrowth: formatPercent(terminalGrowth),
+      terminalGrowth: formatPercent(effectiveTerminalGrowth),
+      terminalGrowthCapped: terminalGrowthCapped ? 'Yes' : 'No',
       fcfUsed: Math.round(fcf).toLocaleString(),
       projectionYears,
+      usdRevenuePct: usdPct > 0 ? (usdPct * 100).toFixed(1) + '%' : '0%',
+      sectorConfidence: isModelSectorAppropriate('dcf', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped,
   };
 }
 
@@ -168,7 +192,7 @@ function dcfValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
 // Model 2: DDM (Dividend Discount Model)
 // ============================================================
 
-function ddmValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function ddmValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   const dividendYield = fundamentals.dividendYield || sectorAvg.avgDividendYield; // already as decimal
   const dps = fundamentals.price * dividendYield;
   const costOfEquity = params.riskFreeRate + (fundamentals.beta || 1.0) * params.equityRiskPremium;
@@ -201,8 +225,10 @@ function ddmValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
       costOfEquity: formatPercent(costOfEquity),
       growthRate: formatPercent(growthRate),
       dividendYield: (dividendYield * 100).toFixed(1) + '%',
+      sectorConfidence: isModelSectorAppropriate('ddm', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -210,7 +236,7 @@ function ddmValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages
 // Model 3: Graham Number
 // ============================================================
 
-function grahamValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function grahamValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   const eps = fundamentals.eps;
   const bvps = fundamentals.bookValuePerShare;
 
@@ -243,8 +269,10 @@ function grahamValuation(fundamentals: StockFundamentals, sectorAvg: SectorAvera
       bookValuePerShare: bvps.toFixed(2),
       grahamMultiplier,
       formula: `sqrt(${grahamMultiplier} × ${eps.toFixed(2)} × ${bvps.toFixed(2)})`,
+      sectorConfidence: isModelSectorAppropriate('graham', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -252,7 +280,7 @@ function grahamValuation(fundamentals: StockFundamentals, sectorAvg: SectorAvera
 // Model 4: Relative Valuation (PE/PB vs Sector)
 // ============================================================
 
-function relativeValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function relativeValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   const eps = fundamentals.eps;
   const bvps = fundamentals.bookValuePerShare;
 
@@ -286,8 +314,10 @@ function relativeValuation(fundamentals: StockFundamentals, sectorAvg: SectorAve
       sectorPB: sectorAvg.avgPB.toFixed(2),
       peBasedValue: Math.round(fairValuePE * 100) / 100,
       pbBasedValue: Math.round(fairValuePB * 100) / 100,
+      sectorConfidence: isModelSectorAppropriate('relative', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -295,7 +325,7 @@ function relativeValuation(fundamentals: StockFundamentals, sectorAvg: SectorAve
 // Model 5: Residual Income Model
 // ============================================================
 
-function residualIncomeValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function residualIncomeValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   const bvps = fundamentals.bookValuePerShare;
   const roe = fundamentals.roe || (fundamentals.eps > 0 && bvps > 0 ? fundamentals.eps / bvps : sectorAvg.avgROE);
   const costOfEquity = params.riskFreeRate + (fundamentals.beta || 1.0) * params.equityRiskPremium;
@@ -346,8 +376,10 @@ function residualIncomeValuation(fundamentals: StockFundamentals, sectorAvg: Sec
       roe: (roe * 100).toFixed(1) + '%',
       costOfEquity: formatPercent(costOfEquity),
       projectionYears,
+      sectorConfidence: isModelSectorAppropriate('residual_income', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -355,7 +387,7 @@ function residualIncomeValuation(fundamentals: StockFundamentals, sectorAvg: Sec
 // Model 6: EV/EBITDA
 // ============================================================
 
-function evEbitdaValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function evEbitdaValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   const ev = fundamentals.marketCap + fundamentals.totalDebt - (fundamentals.totalAssets - fundamentals.totalEquity - fundamentals.totalDebt);
   const ebitda = fundamentals.operatingCashflow + (fundamentals.totalDebt * 0.05); // approximate depreciation
   const currentEVEbitda = safeDivide(ev, ebitda);
@@ -381,8 +413,10 @@ function evEbitdaValuation(fundamentals: StockFundamentals, sectorAvg: SectorAve
       sectorEVEbitda: targetMultiple.toFixed(1),
       estimatedEBITDA: Math.round(ebitda).toLocaleString(),
       enterpriseValue: Math.round(ev).toLocaleString(),
+      sectorConfidence: isModelSectorAppropriate('ev_ebitda', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -390,7 +424,40 @@ function evEbitdaValuation(fundamentals: StockFundamentals, sectorAvg: SectorAve
 // Model 7: Asset-Based (NAV)
 // ============================================================
 
-function assetBasedValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function assetBasedValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
+  // For real estate & construction sectors, use the specialized NAV model
+  const isRealEstateLike = sector.toLowerCase().includes('real estate') ||
+    sector.toLowerCase().includes('construction');
+
+  if (isRealEstateLike) {
+    const navResult = calcNAV({
+      totalAssets: fundamentals.totalAssets,
+      totalDebt: fundamentals.totalDebt,
+      cashEquivalents: fundamentals.cashEquivalents ?? (fundamentals.totalAssets - fundamentals.totalEquity - fundamentals.totalDebt),
+      minorityInterests: fundamentals.minorityInterests ?? 0,
+      sharesOutstanding: fundamentals.sharesOutstanding || (fundamentals.price > 0 ? fundamentals.marketCap / fundamentals.price : 1),
+      price: fundamentals.price,
+      roe: fundamentals.roe,
+      totalEquity: fundamentals.totalEquity,
+    });
+
+    return {
+      model: navResult.model,
+      modelName: navResult.modelName,
+      modelNameAr: 'صافي قيمة الأصول',
+      fairValue: navResult.fairValue,
+      upsideDownside: navResult.upsideDownside,
+      confidence: navResult.confidence,
+      assumptions: {
+        ...navResult.assumptions,
+        sectorConfidence: isModelSectorAppropriate('nav', sector) ? 'HIGH' : 'LOW',
+      },
+      verdict: navResult.verdict,
+      terminalGrowthCapped: navResult.terminalGrowthCapped,
+    };
+  }
+
+  // Standard NAV for other sectors
   // Net Asset Value = (Total Assets - Total Liabilities) / Shares Outstanding
   const totalLiabilities = fundamentals.totalAssets - fundamentals.totalEquity;
   const nav = fundamentals.totalEquity;
@@ -425,8 +492,10 @@ function assetBasedValuation(fundamentals: StockFundamentals, sectorAvg: SectorA
       navPerShare: navPerShare.toFixed(2),
       adjustmentFactor: adjustmentFactor.toFixed(2),
       roe: (roe * 100).toFixed(1) + '%',
+      sectorConfidence: isModelSectorAppropriate('nav', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -434,7 +503,7 @@ function assetBasedValuation(fundamentals: StockFundamentals, sectorAvg: SectorA
 // Model 8: Earnings Power Value (EPV)
 // ============================================================
 
-function earningsPowerValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams): ValuationResult {
+function earningsPowerValuation(fundamentals: StockFundamentals, sectorAvg: SectorAverages, params: MarketParams, sector: string): ValuationResult {
   // EPV = Normalized Earnings / Cost of Capital
   const normalizedEarnings = fundamentals.netIncome || (fundamentals.revenue * (fundamentals.profitMargin || sectorAvg.avgROE * 0.5));
   const wacc = calculateWACC(fundamentals, params);
@@ -460,8 +529,10 @@ function earningsPowerValuation(fundamentals: StockFundamentals, sectorAvg: Sect
       wacc: formatPercent(wacc),
       distributableRatio: '85%',
       maintenanceCapexBuffer: '15%',
+      sectorConfidence: isModelSectorAppropriate('epv', sector) ? 'HIGH' : 'LOW',
     },
     verdict: upside > 0.15 ? 'undervalued' : upside < -0.15 ? 'overvalued' : 'fair',
+    terminalGrowthCapped: false,
   };
 }
 
@@ -473,26 +544,40 @@ export function runAllModels(
   fundamentals: StockFundamentals,
   sectorAvg: SectorAverages = DEFAULT_SECTOR_AVERAGES,
   params: MarketParams = DEFAULT_MARKET_PARAMS,
+  sector: string = '',
 ): ComprehensiveValuation {
   const models: ValuationResult[] = [
-    dcfValuation(fundamentals, sectorAvg, params),
-    ddmValuation(fundamentals, sectorAvg, params),
-    grahamValuation(fundamentals, sectorAvg, params),
-    relativeValuation(fundamentals, sectorAvg, params),
-    residualIncomeValuation(fundamentals, sectorAvg, params),
-    evEbitdaValuation(fundamentals, sectorAvg, params),
-    assetBasedValuation(fundamentals, sectorAvg, params),
-    earningsPowerValuation(fundamentals, sectorAvg, params),
+    dcfValuation(fundamentals, sectorAvg, params, sector),
+    ddmValuation(fundamentals, sectorAvg, params, sector),
+    grahamValuation(fundamentals, sectorAvg, params, sector),
+    relativeValuation(fundamentals, sectorAvg, params, sector),
+    residualIncomeValuation(fundamentals, sectorAvg, params, sector),
+    evEbitdaValuation(fundamentals, sectorAvg, params, sector),
+    assetBasedValuation(fundamentals, sectorAvg, params, sector),
+    earningsPowerValuation(fundamentals, sectorAvg, params, sector),
   ];
 
-  // Filter out models with zero fair value
+  // Get sector-specific weights
+  const sectorConfig = getSectorWeights(sector || fundamentals.ticker);
+
+  // Compute weighted fair value
   const validModels = models.filter(m => m.fairValue > 0);
+  let weightedFairValue = 0;
+  let totalWeight = 0;
+  for (const model of validModels) {
+    const weight = sectorConfig.weights[model.model] ?? 0;
+    if (weight > 0) {
+      weightedFairValue += model.fairValue * weight;
+      totalWeight += weight;
+    }
+  }
+  // If no sector weights matched, fall back to equal weighting
+  const averageFairValue = totalWeight > 0
+    ? weightedFairValue / totalWeight
+    : validModels.reduce((sum, m) => sum + m.fairValue, 0) / (validModels.length || 1);
+
   const fairValues = validModels.map(m => m.fairValue);
   const upsides = validModels.map(m => m.upsideDownside);
-
-  const averageFairValue = fairValues.length > 0
-    ? fairValues.reduce((a, b) => a + b, 0) / fairValues.length
-    : 0;
 
   const sortedFairValues = [...fairValues].sort((a, b) => a - b);
   const medianFairValue = sortedFairValues.length > 0

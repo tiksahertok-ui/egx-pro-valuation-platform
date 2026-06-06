@@ -41,6 +41,7 @@ export interface EGXFinancialData {
   freeCashflow: number;
   revenueGrowth: number;   // As decimal
   earningsGrowth: number;  // As decimal
+  usdRevenuePct: number;   // 0-1, percentage of USD-denominated revenue
 }
 
 // Helper to create financial data entries concisely
@@ -70,6 +71,7 @@ function f(
   evEbitda: number,
   revGrowth: number,
   earnGrowth: number,
+  usdPct: number = 0,
 ): EGXFinancialData {
   const B = 1e9;
   return {
@@ -104,13 +106,14 @@ function f(
     freeCashflow: netIncomeB * B * 0.7,
     revenueGrowth: revGrowth,
     earningsGrowth: earnGrowth,
+    usdRevenuePct: usdPct,
   };
 }
 
 export const EGX_FINANCIAL_DATA: EGXFinancialData[] = [
   // === BANKING ===
   f('COMI', 'Commercial International Bank', 'Banking',
-    70, 11.5, 58, 6.1, 1.2, 159, 0.05, 0.20, 0.032, 45, 26.5, 830, 130, 180, 1.38, 0.55, 0.42, 0.35, 0.8, 5.5, 0.22, 0.18),
+    70, 11.5, 58, 6.1, 1.2, 159, 0.05, 0.20, 0.032, 45, 26.5, 830, 130, 180, 1.38, 0.55, 0.42, 0.35, 0.8, 5.5, 0.22, 0.18, 0.10),
   f('MISR', 'Banque Misr', 'Banking',
     5, 1.67, 10, 3.0, 0.5, 25, 0.07, 0.17, 0.018, 30, 8.3, 460, 50, 120, 2.4, 0.48, 0.32, 0.28, 0.6, 4.0, 0.15, 0.12),
   f('NBEA', 'National Bank of Egypt', 'Banking',
@@ -188,7 +191,7 @@ export const EGX_FINANCIAL_DATA: EGXFinancialData[] = [
 
   // === TELECOMMUNICATIONS ===
   f('ETEL', 'Telecom Egypt', 'Telecommunications',
-    30, 3.75, 25, 8.0, 1.2, 50, 0.07, 0.15, 0.055, 35, 6.3, 115, 42, 20, 0.48, 0.52, 0.22, 0.12, 0.75, 5.0, 0.10, 0.08),
+    30, 3.75, 25, 8.0, 1.2, 50, 0.07, 0.15, 0.055, 35, 6.3, 115, 42, 20, 0.48, 0.52, 0.22, 0.12, 0.75, 5.0, 0.10, 0.08, 0.35),
   f('OTMT', 'Orascom Telecom Media', 'Telecommunications',
     1.5, 0.1, 1.88, 15, 0.8, 3, 0.0, 0.05, 0.025, 1, 0.15, 12, 3, 2, 1.50, 0.25, 0.08, 0.03, 1.3, 20, 0.05, 0.02),
   f('VODE', 'Vodafone Egypt', 'Telecommunications',
