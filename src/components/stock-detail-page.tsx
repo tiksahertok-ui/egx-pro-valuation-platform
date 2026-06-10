@@ -26,6 +26,7 @@ import {
   getOverallVerdictLabel, MODEL_DESCRIPTIONS,
 } from '@/lib/helpers';
 import type { StockDetail as StockDetailType } from '@/lib/types';
+import { ScenarioAnalyzer } from '@/components/scenario-analyzer';
 
 interface StockDetailPageProps {
   detail: StockDetailType;
@@ -443,6 +444,26 @@ export function StockDetailPage({ detail, onBack }: StockDetailPageProps) {
       {valuation && (
         <WACCSensitivityTable valuation={valuation} currentPrice={stock.price} />
       )}
+
+      {/* P1.6: Scenario Analysis */}
+      {valuation && (
+        <ScenarioAnalyzer valuation={valuation} currentPrice={stock.price} />
+      )}
+
+      {/* E6: Disclaimer Banner */}
+      <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-sm">
+        <CardContent className="p-3">
+          <div className="flex items-start gap-2">
+            <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <strong className="text-amber-600 dark:text-amber-400">Disclaimer:</strong> This valuation analysis is for informational purposes only and does not constitute investment advice.
+              Fair value estimates are based on mathematical models with inherent assumptions and limitations. Past performance does not guarantee future results.
+              Always conduct your own research and consult a licensed financial advisor before making investment decisions.
+              Data may be delayed or inaccurate. The EGX Pro platform is not responsible for any trading losses.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Price Chart & Volume */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

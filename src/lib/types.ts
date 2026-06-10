@@ -91,6 +91,9 @@ export interface StockDetail {
     averageUpside: number;
     overallVerdict: string;
     confidenceScore: number;
+    horizonAdjustedFairValue?: number;
+    horizonSpecificVerdict?: string;
+    horizon?: 'short' | 'medium' | 'long';
   } | null;
   sectorAvg: {
     avgPE: number;

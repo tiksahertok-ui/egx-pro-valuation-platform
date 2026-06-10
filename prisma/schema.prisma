@@ -42,6 +42,9 @@ model Stock {
   technicalIndicators TechnicalIndicator[]
   financialData       FinancialData[]
   valuationResults    ValuationResult[]
+  supportResistance   SupportResistance[]
+  alerts              Alert[]
+  portfolioHoldings   PortfolioHolding[]
 }
 
 model FinancialData {
@@ -69,6 +72,7 @@ model FinancialData {
   earningsGrowth     Float    @default(0)
   usdRevenuePct      Float    @default(0)
   cashEquivalents    Float    @default(0)
+  ebitda             Float    @default(0)
   lastSyncedAt       DateTime?
   createdAt          DateTime @default(now())
 
@@ -78,17 +82,17 @@ model FinancialData {
 }
 
 model PriceHistory {
-  id        String   @id @default(cuid())
-  stockId   String
-  date      DateTime
-  open      Float
-  high      Float
-  low       Float
-  close     Float
-  volume    Float
-  adjClose      Float    @default(0)
-  lastSyncedAt  DateTime?
-  createdAt     DateTime @default(now())
+  id           String    @id @default(cuid())
+  stockId      String
+  date         DateTime
+  open         Float
+  high         Float
+  low          Float
+  close        Float
+  volume       Float
+  adjClose     Float     @default(0)
+  lastSyncedAt DateTime?
+  createdAt    DateTime  @default(now())
 
   stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
@@ -96,29 +100,29 @@ model PriceHistory {
 }
 
 model TechnicalIndicator {
-  id            String   @id @default(cuid())
-  stockId       String
-  date          DateTime
-  rsi14         Float    @default(0)
-  macdLine      Float    @default(0)
-  macdSignal    Float    @default(0)
-  macdHist      Float    @default(0)
-  bbUpper       Float    @default(0)
-  bbMiddle      Float    @default(0)
-  bbLower       Float    @default(0)
-  sma20         Float    @default(0)
-  sma50         Float    @default(0)
-  sma200        Float    @default(0)
-  ema12         Float    @default(0)
-  ema26         Float    @default(0)
-  atr14         Float    @default(0)
-  adx14         Float    @default(0)
-  stochasticK   Float    @default(0)
-  stochasticD   Float    @default(0)
-  williamsR     Float    @default(0)
-  cci14         Float    @default(0)
-  obv           Float    @default(0)
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  stockId      String
+  date         DateTime
+  rsi14        Float    @default(0)
+  macdLine     Float    @default(0)
+  macdSignal   Float    @default(0)
+  macdHist     Float    @default(0)
+  bbUpper      Float    @default(0)
+  bbMiddle     Float    @default(0)
+  bbLower      Float    @default(0)
+  sma20        Float    @default(0)
+  sma50        Float    @default(0)
+  sma200       Float    @default(0)
+  ema12        Float    @default(0)
+  ema26        Float    @default(0)
+  atr14        Float    @default(0)
+  adx14        Float    @default(0)
+  stochasticK  Float    @default(0)
+  stochasticD  Float    @default(0)
+  williamsR    Float    @default(0)
+  cci14        Float    @default(0)
+  obv          Float    @default(0)
+  createdAt    DateTime @default(now())
 
   stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 
@@ -126,13 +130,13 @@ model TechnicalIndicator {
 }
 
 model ValuationResult {
-  id               String   @id @default(cuid())
-  stockId          String
-  model            String
-  fairValue        Float    @default(0)
-  upsideDownside   Float    @default(0)
-  confidence       Float    @default(0)
-  assumptions      String   @default("{}")
+  id                 String   @id @default(cuid())
+  stockId            String
+  model              String
+  fairValue          Float    @default(0)
+  upsideDownside     Float    @default(0)
+  confidence         Float    @default(0)
+  assumptions        String   @default("{}")
   calculatedAt       DateTime @default(now())
   terminalGrowthCapped Boolean @default(false)
 
@@ -180,6 +184,7 @@ model MarketParams {
   egx30PE               Float  @default(0)
   inflationRate         Float  @default(0.30)
   gdpGrowthRate         Float  @default(0.05)
+  corporateDebtSpread   Float  @default(0.03)
   updatedAt             DateTime @updatedAt
 }
 
@@ -191,4 +196,62 @@ model DataRefreshLog {
   errors        String    @default("[]")
   startedAt     DateTime  @default(now())
   completedAt   DateTime?
+}
+
+/// P1.4: Support & Resistance levels
+model SupportResistance {
+  id           String   @id @default(cuid())
+  stockId      String
+  date         DateTime
+  pivot        Float    @default(0)
+  support1     Float    @default(0)
+  resistance1  Float    @default(0)
+  support2     Float    @default(0)
+  resistance2  Float    @default(0)
+  vwap         Float    @default(0)
+  swingHigh    Float    @default(0)
+  swingLow     Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([stockId, date])
+}
+
+/// P2.1: Portfolio models
+model Portfolio {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  holdings PortfolioHolding[]
+}
+
+model PortfolioHolding {
+  id          String   @id @default(cuid())
+  portfolioId String
+  stockId     String
+  shares      Float    @default(0)
+  avgCost     Float    @default(0)
+  addedAt     DateTime @default(now())
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  stock     Stock     @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, stockId])
+}
+
+/// P2.4: Alerting system
+model Alert {
+  id        String   @id @default(cuid())
+  stockId   String
+  type      String   // 'price_target', 'support_breach', 'resistance_break', 'fair_value_hit'
+  threshold Float
+  isActive  Boolean  @default(true)
+  triggered Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  stock Stock @relation(fields: [stockId], references: [id], onDelete: Cascade)
 }

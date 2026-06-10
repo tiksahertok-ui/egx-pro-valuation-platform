@@ -3,39 +3,18 @@ import { z } from 'zod/v4';
 import { supabase } from '@/lib/supabase';
 import { getFinancialDataByTicker, getHardcodedSectorAverages } from '@/lib/data/egx-financial-data';
 import { runAllModels, DEFAULT_MARKET_PARAMS, type StockFundamentals, type SectorAverages } from '@/lib/valuation-engine';
-
-// Rate limiter - in-memory token bucket (10 requests/minute per IP)
-const rateLimiter = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 10;
-const RATE_WINDOW_MS = 60 * 1000;
-
-function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
-  const now = Date.now();
-  const entry = rateLimiter.get(ip);
-
-  if (!entry || now > entry.resetAt) {
-    rateLimiter.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
-    return { allowed: true };
-  }
-
-  if (entry.count >= RATE_LIMIT) {
-    return { allowed: false, retryAfter: Math.ceil((entry.resetAt - now) / 1000) };
-  }
-
-  entry.count++;
-  return { allowed: true };
-}
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit';
 
 const ReportSchema = z.object({
-  stockId: z.string().min(1).max(10),
+  stockId: z.string().min(1).max(10).regex(/^[A-Za-z0-9.]+$/),
   scenario: z.enum(['bear', 'base', 'bull']),
   lang: z.enum(['ar', 'en']),
 });
 
 export async function POST(request: Request) {
-  // Rate limiting
-  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-  const rateCheck = checkRateLimit(ip);
+  // P1.3: Rate limiting
+  const ip = getClientIp(request);
+  const rateCheck = checkRateLimit('api/report', ip, RATE_LIMITS.report.limit, RATE_LIMITS.report.windowMs);
   if (!rateCheck.allowed) {
     return NextResponse.json(
       { error: 'Rate limit exceeded' },
@@ -44,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   // Validate input
-  let parsed;
+  let parsed: z.SafeParseReturnType<{ stockId: string; scenario: "bear" | "base" | "bull"; lang: "ar" | "en" }, { stockId: string; scenario: "bear" | "base" | "bull"; lang: "ar" | "en" }>;
   try {
     const body = await request.json();
     parsed = ReportSchema.safeParse(body);
@@ -65,7 +44,6 @@ export async function POST(request: Request) {
     if (dbStock) {
       stock = dbStock as Record<string, unknown>;
     } else {
-      // Try master list fallback
       const finData = getFinancialDataByTicker(stockId);
       if (!finData) {
         return NextResponse.json({ error: 'Stock not found' }, { status: 404 });
@@ -144,13 +122,16 @@ export async function POST(request: Request) {
 
     const valuation = runAllModels(fundamentals, sectorAvg, DEFAULT_MARKET_PARAMS, (stock.sector as string) || '');
 
-    // Compute scenario adjustments
     const scenarioMultiplier = scenario === 'bear' ? 0.8 : scenario === 'bull' ? 1.2 : 1.0;
     const scenarioFairValue = valuation.averageFairValue * scenarioMultiplier;
 
-    // WACC and cost of equity
+    // Use proper WACC calculation
     const costOfEquity = DEFAULT_MARKET_PARAMS.riskFreeRate + (fundamentals.beta || 1.0) * DEFAULT_MARKET_PARAMS.equityRiskPremium;
-    const wacc = costOfEquity * 0.7 + DEFAULT_MARKET_PARAMS.riskFreeRate * 0.7 * 0.3; // simplified
+    const preTaxCostOfDebt = DEFAULT_MARKET_PARAMS.riskFreeRate + (DEFAULT_MARKET_PARAMS.corporateDebtSpread ?? 0.03);
+    const afterTaxCostOfDebt = preTaxCostOfDebt * 0.7;
+    const equityWeight = fundamentals.totalEquity / (fundamentals.totalEquity + fundamentals.totalDebt) || 0.7;
+    const debtWeight = 1 - equityWeight;
+    const wacc = equityWeight * costOfEquity + debtWeight * afterTaxCostOfDebt;
 
     // Get technical indicators
     let techSignal = 'Neutral';
@@ -175,7 +156,6 @@ export async function POST(request: Request) {
       }
     } catch { /* use default */ }
 
-    // Construct prompt for Claude
     const langInstruction = lang === 'ar' ? 'Respond entirely in Arabic.' : 'Respond entirely in English.';
 
     const prompt = `You are an institutional-grade equity research analyst covering the Egyptian Exchange (EGX). Generate a comprehensive investment research report.
@@ -189,6 +169,7 @@ UPSIDE/DOWNSIDE: ${valuation.averageUpside > 0 ? '+' : ''}${valuation.averageUps
 
 WACC: ${(wacc * 100).toFixed(1)}%
 COST OF EQUITY: ${(costOfEquity * 100).toFixed(1)}%
+PRE-TAX COST OF DEBT: ${(preTaxCostOfDebt * 100).toFixed(1)}%
 TERMINAL GROWTH RATE: ${(DEFAULT_MARKET_PARAMS.gdpGrowthRate * 50).toFixed(1)}%
 
 KEY FINANCIAL RATIOS:
@@ -197,6 +178,7 @@ KEY FINANCIAL RATIOS:
 - EV/EBITDA: ${fundamentals.evToEbitda.toFixed(1)}
 - ROE: ${(fundamentals.roe * 100).toFixed(1)}%
 - Net Margin: ${(fundamentals.profitMargin * 100).toFixed(1)}%
+- D/E: ${fundamentals.debtToEquity.toFixed(2)}
 
 SCENARIO ANALYSIS:
 - Bear Case: EGP ${(valuation.averageFairValue * 0.8).toFixed(2)} (-20%)
@@ -212,9 +194,9 @@ OVERALL VERDICT: ${valuation.overallVerdict}
 CONFIDENCE SCORE: ${(valuation.confidenceScore * 100).toFixed(0)}%
 
 Generate a structured report with these sections:
-1. Investment Thesis (2-3 paragraphs)
-2. Valuation Summary (key metrics and fair value estimate)
-3. Key Risks (3-5 specific risks)
+1. Investment Thesis (2-3 paragraphs analyzing the stock's value proposition)
+2. Valuation Summary (key metrics, fair value estimate, and model convergence)
+3. Key Risks (3-5 specific risks for this Egyptian stock)
 4. Catalysts (3-5 potential positive catalysts)
 5. Recommendation (Buy/Hold/Sell with target price range)
 
@@ -223,7 +205,6 @@ ${langInstruction}`;
     // Call Anthropic Claude API
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      // Fallback: generate a basic report without AI
       const report = generateFallbackReport(stock, fundamentals, valuation, scenario, scenarioFairValue, wacc, costOfEquity, techSignal, lang);
       return NextResponse.json({ report, source: 'fallback', ticker: stock.ticker as string, scenario, lang });
     }
@@ -277,44 +258,51 @@ function generateFallbackReport(
     return `# تقرير استثمار - ${stock.name as string} (${stock.ticker as string})
 
 ## أطروحة الاستثمار
-يُقدر السهم بقيمة عادلة تبلغ ${valuation.averageFairValue.toFixed(2)} ج.م، مع هامش ${valuation.averageUpside > 0 ? 'صعود' : 'هبوط'} بنسبة ${Math.abs(valuation.averageUpside).toFixed(1)}%.
+يُقدر السهم بقيمة عادلة تبلغ ${valuation.averageFairValue.toFixed(2)} ج.م، مع هامش ${valuation.averageUpside > 0 ? 'صعود' : 'هبوط'} بنسبة ${Math.abs(valuation.averageUpside).toFixed(1)}% من السعر الحالي البالغ ${fundamentals.price.toFixed(2)} ج.م. يعتمد هذا التقدير على تحليل متعدد النماذج يشمل التدفق النقدي المخصوم ونموذج جراهام والتقييم النسبي.
 
 ## ملخص التقييم
 - القيمة العادلة: ${valuation.averageFairValue.toFixed(2)} ج.م
 - سيناريو ${scenario === 'bear' ? 'متشائم' : scenario === 'bull' ? 'متفائل' : 'أساسي'}: ${scenarioFairValue.toFixed(2)} ج.م
 - WACC: ${(wacc * 100).toFixed(1)}%
 - تكلفة حقوق الملكية: ${(costOfEquity * 100).toFixed(1)}%
+- درجة الثقة: ${(valuation.confidenceScore * 100).toFixed(0)}%
 
 ## المخاطر الرئيسية
-1. تقلب سعر الصرف
-2. ارتفاع أسعار الفائدة
-3. مخاطر تنظيمية
+1. تقلب سعر الصرف (التعرض للدولار الأمريكي)
+2. ارتفاع أسعار الفائدة (سعر الكبي عند 19%)
+3. مخاطر تنظيمية وتشريعية
+4. مخاطر دورية قطاعية
+5. قيود السيولة على البورصة المصرية
 
 ## المحفزات
-1. تحسن البيئة الاقتصادية
-2. نمو الإيرادات
-3. إصلاحات هيكلية
+1. تقدم الإصلاح الاقتصادي وامتثال برنامج صندوق النقد
+2. تسارع نمو الإيرادات
+3. استثمارات استراتيجية وتوسعات
+4. جاذبية العائد التوزيعي
+5. احتمال إدراج/إعادة توازن المؤشرات
 
 ## التوصية
-${valuation.overallVerdict === 'strong_buy' || valuation.overallVerdict === 'buy' ? 'شراء' : valuation.overallVerdict === 'sell' || valuation.overallVerdict === 'strong_sell' ? 'بيع' : 'احتفاظ'}`;
+**${valuation.overallVerdict === 'strong_buy' ? 'شراء قوي' : valuation.overallVerdict === 'buy' ? 'شراء' : valuation.overallVerdict === 'sell' ? 'بيع' : valuation.overallVerdict === 'strong_sell' ? 'بيع قوي' : 'احتفاظ'}**
+نطاق السعر المستهدف: ${Math.round(valuation.averageFairValue * 0.9 * 100) / 100} - ${Math.round(valuation.averageFairValue * 1.1 * 100) / 100} ج.م`;
   }
 
   return `# Investment Report - ${stock.name as string} (${stock.ticker as string})
 
 ## Investment Thesis
-The stock is estimated at a fair value of EGP ${valuation.averageFairValue.toFixed(2)}, representing ${valuation.averageUpside > 0 ? 'an upside' : 'a downside'} of ${Math.abs(valuation.averageUpside).toFixed(1)}% from the current price of EGP ${fundamentals.price.toFixed(2)}.
+The stock is estimated at a fair value of EGP ${valuation.averageFairValue.toFixed(2)}, representing ${valuation.averageUpside > 0 ? 'an upside' : 'a downside'} of ${Math.abs(valuation.averageUpside).toFixed(1)}% from the current price of EGP ${fundamentals.price.toFixed(2)}. This estimate is based on a multi-model analysis including Discounted Cash Flow, Graham Number, and Relative Valuation, with sector-appropriate weighting applied.
 
 ## Valuation Summary
 - Fair Value: EGP ${valuation.averageFairValue.toFixed(2)}
 - ${scenario.charAt(0).toUpperCase() + scenario.slice(1)} Scenario: EGP ${scenarioFairValue.toFixed(2)}
 - WACC: ${(wacc * 100).toFixed(1)}%
 - Cost of Equity: ${(costOfEquity * 100).toFixed(1)}%
+- Confidence Score: ${(valuation.confidenceScore * 100).toFixed(0)}%
 - Technical Signal: ${techSignal}
 
 ## Key Risks
-1. Currency devaluation risk (USD/EGP exposure)
-2. Rising interest rate environment (CBE rate at 19%)
-3. Regulatory and policy changes
+1. Currency devaluation risk (USD/EGP exposure at ${DEFAULT_MARKET_PARAMS.usdegpRate})
+2. Rising interest rate environment (CBE overnight rate at 19%)
+3. Regulatory and policy changes affecting the sector
 4. Sector-specific cyclical risks
 5. Liquidity constraints on the EGX
 

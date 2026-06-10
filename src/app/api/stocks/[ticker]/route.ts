@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod/v4';
 import { supabase, type SupabaseStock, type SupabaseFinancialData, type SupabasePriceHistory, type SupabaseSectorStats } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
 import { getFinancialDataByTicker, getHardcodedSectorAverages } from '@/lib/data/egx-financial-data';
-import { runAllModels, type StockFundamentals, type SectorAverages, DEFAULT_MARKET_PARAMS } from '@/lib/valuation-engine';
-import { z } from 'zod/v4';
+import { runAllModels, type StockFundamentals, type SectorAverages, DEFAULT_MARKET_PARAMS, type InvestmentHorizon } from '@/lib/valuation-engine';
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit';
 
-const TickerSchema = z.string().min(1).max(10).regex(/^[A-Za-z0-9]+$/);
+const TickerSchema = z.string().min(1).max(10).regex(/^[A-Za-z0-9.]+$/);
+const HorizonSchema = z.enum(['short', 'medium', 'long']).optional();
 
 export const dynamic = 'force-dynamic';
 
-// Helper to safely map technical indicators, handling macdHistogram vs macdHist field name
 function mapTechnicalIndicator(ti: Record<string, unknown>) {
   return {
     date: (ti.date as string) || '',
     rsi14: (ti.rsi14 as number) ?? 0,
     macdLine: (ti.macdLine as number) ?? 0,
     macdSignal: (ti.macdSignal as number) ?? 0,
-    // DB stores as macdHistogram, frontend expects macdHist
     macdHist: ((ti.macdHistogram as number) ?? (ti.macdHist as number)) ?? 0,
     bbUpper: (ti.bbUpper as number) ?? 0,
     bbMiddle: (ti.bbMiddle as number) ?? 0,
@@ -36,7 +36,6 @@ function mapTechnicalIndicator(ti: Record<string, unknown>) {
   };
 }
 
-// Helper: build a default stock object from master list entry + hardcoded financial data
 function buildDefaultStock(masterStock: typeof EGX_STOCKS[number]): SupabaseStock {
   const finData = getFinancialDataByTicker(masterStock.ticker);
   return {
@@ -76,16 +75,30 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ ticker: string }> }
 ) {
-  const { ticker } = await params;
-
-  // Validate ticker format
-  const validation = TickerSchema.safeParse(ticker);
-  if (!validation.success) {
-    return NextResponse.json({ error: 'Invalid ticker format' }, { status: 400 });
+  // P1.3: Rate limiting
+  const ip = getClientIp(request);
+  const rateCheck = checkRateLimit('api/stocks', ip, RATE_LIMITS.stocks.limit, RATE_LIMITS.stocks.windowMs);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded' },
+      { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter || 60) } }
+    );
   }
 
+  const { ticker } = await params;
+
+  // P1.2: Validate ticker format
+  const validation = TickerSchema.safeParse(ticker);
+  if (!validation.success) {
+    return NextResponse.json({ error: 'Invalid ticker format', details: validation.error.issues }, { status: 400 });
+  }
+
+  // P1.5: Parse horizon from query params
+  const { searchParams } = new URL(request.url);
+  const horizonParsed = HorizonSchema.safeParse(searchParams.get('horizon'));
+  const horizon: InvestmentHorizon | undefined = horizonParsed.success ? horizonParsed.data : undefined;
+
   try {
-    // Get stock from Supabase
     let stock: SupabaseStock | null = null;
 
     try {
@@ -102,7 +115,6 @@ export async function GET(
       console.warn('Supabase stock query failed:', err);
     }
 
-    // Fallback to master list if not found in DB
     if (!stock) {
       const masterStock = EGX_STOCKS.find(s => s.ticker === ticker.toUpperCase());
       if (!masterStock) {
@@ -111,7 +123,6 @@ export async function GET(
       stock = buildDefaultStock(masterStock);
     }
 
-    // If stock exists in DB but has no financial data, enrich from hardcoded data
     const finData = getFinancialDataByTicker(ticker);
     if (finData && (stock.price === 0 || stock.eps === 0)) {
       stock = {
@@ -131,7 +142,6 @@ export async function GET(
       };
     }
 
-    // Get financial data - only if stock has a real DB id (not the fallback id)
     let financialData: SupabaseFinancialData[] = [];
     try {
       const { data, error } = await supabase
@@ -148,7 +158,6 @@ export async function GET(
       console.warn('Supabase financial data query failed:', err);
     }
 
-    // If no financial data in DB, use hardcoded data as synthetic financial data
     if (financialData.length === 0 && finData) {
       financialData = [{
         id: `fin_${finData.ticker}_2024`,
@@ -176,7 +185,6 @@ export async function GET(
       }] as SupabaseFinancialData[];
     }
 
-    // Get price history
     let priceHistory: SupabasePriceHistory[] = [];
     try {
       const { data, error } = await supabase
@@ -193,7 +201,6 @@ export async function GET(
       console.warn('Supabase price history query failed:', err);
     }
 
-    // Generate synthetic price history if none available and we have hardcoded data
     if (priceHistory.length === 0 && finData) {
       const today = new Date();
       priceHistory = Array.from({ length: 90 }, (_, i) => {
@@ -220,7 +227,6 @@ export async function GET(
       });
     }
 
-    // Get technical indicators
     let technicalIndicators: Array<Record<string, unknown>> = [];
     try {
       const { data, error } = await supabase
@@ -237,7 +243,6 @@ export async function GET(
       console.warn('Supabase technical indicators query failed:', err);
     }
 
-    // Generate synthetic technical indicators if none available
     if (technicalIndicators.length === 0 && finData) {
       const today = new Date();
       technicalIndicators = Array.from({ length: 14 }, (_, i) => {
@@ -261,7 +266,6 @@ export async function GET(
       });
     }
 
-    // Get sector averages for valuation
     let sectorAvg: SectorAverages = {
       avgPE: 8.5, avgPB: 1.2, avgROE: 0.14, avgEVEbitda: 6.5, avgDividendYield: 0.05,
     };
@@ -286,7 +290,6 @@ export async function GET(
       // Use defaults
     }
 
-    // Fallback to hardcoded sector averages
     if (sectorAvg.avgPE === 8.5 && sectorAvg.avgPB === 1.2) {
       const hardcodedAvgs = getHardcodedSectorAverages(stock.sector);
       sectorAvg = {
@@ -298,7 +301,6 @@ export async function GET(
       };
     }
 
-    // Run valuation if we have enough data
     let valuation = null;
     const latestFinancial = financialData?.[0];
     const hasBasicData = stock.price > 0 || (latestFinancial && (latestFinancial.eps > 0 || latestFinancial.bookValuePerShare > 0));
@@ -333,17 +335,18 @@ export async function GET(
           revenueGrowth: latestFinancial?.revenueGrowth || 0,
           earningsGrowth: latestFinancial?.earningsGrowth || 0,
           usdRevenuePct: (finData?.usdRevenuePct ?? 0) || 0,
-          cashEquivalents: latestFinancial?.totalAssets ? (latestFinancial.totalAssets - latestFinancial.totalEquity - latestFinancial.totalDebt) : 0,
-          minorityInterests: 0,
+          cashEquivalents: latestFinancial?.cashEquivalents ?? (latestFinancial?.totalAssets ? (latestFinancial.totalAssets - latestFinancial.totalEquity - latestFinancial.totalDebt) : 0),
+          minorityInterests: stock.minorityInterests || 0,
+          ebitda: latestFinancial?.ebitda || 0,
         };
 
-        valuation = runAllModels(fundamentals, sectorAvg, DEFAULT_MARKET_PARAMS, stock.sector);
+        // P1.5: Pass horizon parameter for investment horizon modeling
+        valuation = runAllModels(fundamentals, sectorAvg, DEFAULT_MARKET_PARAMS, stock.sector, horizon);
       } catch (valErr) {
         console.warn('Valuation computation failed:', valErr);
       }
     }
 
-    // Map technical indicators to normalize field names
     const mappedTechIndicators = technicalIndicators.map(mapTechnicalIndicator);
 
     return NextResponse.json({

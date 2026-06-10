@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
+import { z } from 'zod/v4';
 import { supabase, type SupabaseStock } from '@/lib/supabase';
 import { EGX_STOCKS } from '@/lib/data/egx-stocks-master';
 import { getFinancialDataByTicker } from '@/lib/data/egx-financial-data';
+import { checkRateLimit, getClientIp, RATE_LIMITS } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
 
-// Helper: convert a master-list entry to a SupabaseStock-like shape with hardcoded financial data
+const StocksQuerySchema = z.object({
+  sector: z.string().optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+  search: z.string().max(100).optional(),
+});
+
 function masterToStock(s: typeof EGX_STOCKS[number]): SupabaseStock {
   const finData = getFinancialDataByTicker(s.ticker);
   return {
@@ -41,9 +48,32 @@ function masterToStock(s: typeof EGX_STOCKS[number]): SupabaseStock {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // P1.3: Rate limiting
+  const ip = getClientIp(request);
+  const rateCheck = checkRateLimit('api/stocks', ip, RATE_LIMITS.stocks.limit, RATE_LIMITS.stocks.windowMs);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      { error: 'Rate limit exceeded' },
+      { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter || 60) } }
+    );
+  }
+
+  // P1.2: Validate query parameters
+  const { searchParams } = new URL(request.url);
+  const parsed = StocksQuerySchema.safeParse({
+    sector: searchParams.get('sector'),
+    limit: searchParams.get('limit'),
+    search: searchParams.get('search'),
+  });
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid query parameters', details: parsed.error.issues }, { status: 400 });
+  }
+
+  const { sector, limit, search } = parsed.data;
+
   try {
-    // 1. Get stocks from Supabase DB
     let dbStocks: SupabaseStock[] = [];
     try {
       const { data, error } = await supabase
@@ -58,17 +88,14 @@ export async function GET() {
       console.warn('Supabase query failed:', err);
     }
 
-    // 2. Build a map of DB stocks by ticker for quick lookup
     const dbMap = new Map<string, SupabaseStock>();
     for (const s of dbStocks) {
       dbMap.set(s.ticker, s);
     }
 
-    // 3. Merge: for each master list stock, use DB data if available, otherwise use hardcoded/master entry
-    const mergedStocks: SupabaseStock[] = EGX_STOCKS.map(masterStock => {
+    let mergedStocks: SupabaseStock[] = EGX_STOCKS.map(masterStock => {
       const dbStock = dbMap.get(masterStock.ticker);
       if (dbStock) {
-        // If DB stock has no financial data, enrich from hardcoded data
         const finData = getFinancialDataByTicker(masterStock.ticker);
         if (finData && (dbStock.price === 0 || dbStock.eps === 0)) {
           return {
@@ -92,7 +119,6 @@ export async function GET() {
       return masterToStock(masterStock);
     });
 
-    // 4. Also include any DB stocks that are NOT in the master list (edge case)
     const masterTickers = new Set(EGX_STOCKS.map(s => s.ticker));
     for (const dbStock of dbStocks) {
       if (!masterTickers.has(dbStock.ticker)) {
@@ -100,13 +126,32 @@ export async function GET() {
       }
     }
 
-    // 5. Sort: stocks with data (price > 0) first, then alphabetically
+    // Apply filters
+    if (sector) {
+      mergedStocks = mergedStocks.filter(s =>
+        s.sector.toLowerCase().includes(sector.toLowerCase())
+      );
+    }
+    if (search) {
+      const searchLower = search.toLowerCase();
+      mergedStocks = mergedStocks.filter(s =>
+        s.ticker.toLowerCase().includes(searchLower) ||
+        s.name.toLowerCase().includes(searchLower) ||
+        s.nameAr.includes(search)
+      );
+    }
+
+    // Sort: stocks with data first, then alphabetically
     mergedStocks.sort((a, b) => {
       const aHasData = a.price > 0 || a.marketCap > 0 ? 1 : 0;
       const bHasData = b.price > 0 || b.marketCap > 0 ? 1 : 0;
       if (bHasData !== aHasData) return bHasData - aHasData;
       return a.ticker.localeCompare(b.ticker);
     });
+
+    if (limit) {
+      mergedStocks = mergedStocks.slice(0, limit);
+    }
 
     return NextResponse.json({
       stocks: mergedStocks,
@@ -117,7 +162,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Error fetching stocks:', error);
-    // Fallback to master list with financial data
     const masterStocks = EGX_STOCKS.map(s => masterToStock(s));
     return NextResponse.json({
       stocks: masterStocks,

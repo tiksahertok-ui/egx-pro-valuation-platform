@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
-import { BarChart3, Star, Sun, Moon } from 'lucide-react';
+import { BarChart3, Star, Sun, Moon, Clock } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useStocks, useStockDetail, useSectors, useRefreshData } from '@/lib/api-hooks';
 import { AppSidebar } from '@/components/app-sidebar';
@@ -112,6 +112,14 @@ export default function EGXProPlatform() {
             </span>
           </div>
           <div className="ml-auto flex items-center gap-1">
+            {/* Data freshness indicator */}
+            {stocksData?.source && (
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1 mr-2">
+                <Clock className="w-3 h-3" />
+                {stocksData.source === 'master_fallback' ? 'Cached data' : 'Live data'}
+                {stocksData.dbCount > 0 && ` (${stocksData.dbCount} synced)`}
+              </span>
+            )}
             <ThemeToggle />
             {selectedTicker && activeView === 'stock-detail' && (
               <Button

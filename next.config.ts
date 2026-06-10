@@ -2,23 +2,19 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false, // STRICT: fix all TS errors before build
   },
-  reactStrictMode: false,
+  reactStrictMode: true, // STRICT: catch side effects
   output: 'standalone',
   images: {
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
+      { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
+      { protocol: 'https', hostname: '*.supabase.co' },
+      { protocol: 'https', hostname: 'egx.com.eg' },
+      // Add ONLY explicitly required domains
     ],
   },
-  // Handle missing env vars gracefully for Vercel deployment
-  env: {
-    NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
-  },
+  // Do NOT expose secrets here; use runtime env vars only
 };
 
 export default nextConfig;

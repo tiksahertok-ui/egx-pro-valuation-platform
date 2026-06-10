@@ -13,12 +13,10 @@ export function formatNumber(num: number): string {
 
 export function formatPrice(num: number): string {
   if (!num) return '-';
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency: 'EGP',
+  return 'EGP ' + num.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(num);
+  });
 }
 
 export function formatMarketCap(num: number): string {
