@@ -65,4 +65,6 @@ export const RATE_LIMITS = {
   technical: { limit: 30, windowMs: 60_000 },     // 30 req/min
   report: { limit: 10, windowMs: 60_000 },         // 10 req/min
   supportResistance: { limit: 30, windowMs: 60_000 }, // 30 req/min
+  portfolio: { limit: 30, windowMs: 60_000 },     // 30 req/min - P2.1
+  alerts: { limit: 30, windowMs: 60_000 },        // 30 req/min - P2.4
 } as const;

@@ -308,7 +308,7 @@ async function fetchPriceHistoryFromYahoo(
       if (close == null) continue;
 
       history.push({
-        date: new Date(timestamps[i] * 1000),
+        date: new Date((timestamps[i] ?? 0) * 1000),
         open: quotes.open?.[i] ?? close,
         high: quotes.high?.[i] ?? close,
         low: quotes.low?.[i] ?? close,
@@ -394,8 +394,14 @@ async function fetchFinancialsFromYahoo(yahooSymbol: string): Promise<FinancialD
 
 async function fetchPriceFromWebSearch(ticker: string): Promise<StockPrice | null> {
   try {
-    // Dynamic import to avoid client-side bundling
-    const ZAI = (await import('z-ai-web-dev-sdk')).default;
+    // Dynamic import - z-ai-web-dev-sdk may not be available in all environments
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let ZAI: any;
+    try {
+      ZAI = (await import('z-ai-web-dev-sdk' as string)).default;
+    } catch {
+      return null; // SDK not available
+    }
     const zai = await ZAI.create();
     const results = await zai.functions.invoke('web_search', {
       query: `EGX ${ticker} stock price today Egyptian Exchange`,
@@ -408,7 +414,7 @@ async function fetchPriceFromWebSearch(ticker: string): Promise<StockPrice | nul
       const text = `${result.name} ${result.snippet}`;
       const priceMatch = text.match(/EGP\s*([\d,.]+)/i) || text.match(/price[:\s]*EGP\s*([\d,.]+)/i);
       if (priceMatch) {
-        const price = parseFloat(priceMatch[1].replace(/,/g, ''));
+        const price = parseFloat((priceMatch[1] ?? '').replace(/,/g, ''));
         if (!isNaN(price) && price > 0) {
           return {
             price,
@@ -733,6 +739,7 @@ export async function refreshAllStockPrices(
 
   for (let i = 0; i < stocks.length; i++) {
     const stock = stocks[i];
+    if (!stock) continue;
     try {
       const price = await fetchStockPrice(stock.yahooSymbol);
       if (price) {
@@ -835,6 +842,7 @@ export async function refreshAllFinancials(
 
   for (let i = 0; i < staleStocks.length; i++) {
     const stock = staleStocks[i];
+    if (!stock) continue;
     try {
       const data = await fetchFinancialData(stock.yahooSymbol);
       if (data) {
@@ -888,6 +896,7 @@ export async function refreshStalePrices(
 
   for (let i = 0; i < staleStocks.length; i++) {
     const stock = staleStocks[i];
+    if (!stock) continue;
     try {
       const price = await fetchStockPrice(stock.yahooSymbol);
       if (price) {
@@ -948,6 +957,7 @@ export async function fetchAllPriceHistory(
 
   for (let i = 0; i < stocks.length; i++) {
     const stock = stocks[i];
+    if (!stock) continue;
     try {
       const result = await fetchStockPriceHistory(stock, range);
       if (result.success) {

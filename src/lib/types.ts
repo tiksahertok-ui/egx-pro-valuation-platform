@@ -29,11 +29,13 @@ export interface StockData {
 export interface ValuationModelResult {
   model: string;
   modelName: string;
+  modelNameAr: string;
   fairValue: number;
   upsideDownside: number;
   confidence: number;
   assumptions: Record<string, number | string>;
   verdict: 'undervalued' | 'fair' | 'overvalued';
+  terminalGrowthCapped: boolean;
 }
 
 export interface StockDetail {
@@ -89,10 +91,10 @@ export interface StockDetail {
     averageFairValue: number;
     medianFairValue: number;
     averageUpside: number;
-    overallVerdict: string;
+    overallVerdict: 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell';
     confidenceScore: number;
     horizonAdjustedFairValue?: number;
-    horizonSpecificVerdict?: string;
+    horizonSpecificVerdict?: 'strong_buy' | 'buy' | 'hold' | 'sell' | 'strong_sell';
     horizon?: 'short' | 'medium' | 'long';
   } | null;
   sectorAvg: {

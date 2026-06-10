@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   // Validate input
-  let parsed: z.SafeParseReturnType<{ stockId: string; scenario: "bear" | "base" | "bull"; lang: "ar" | "en" }, { stockId: string; scenario: "bear" | "base" | "bull"; lang: "ar" | "en" }>;
+  let parsed: ReturnType<typeof ReportSchema.safeParse>;
   try {
     const body = await request.json();
     parsed = ReportSchema.safeParse(body);

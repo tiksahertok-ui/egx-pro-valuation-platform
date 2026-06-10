@@ -48,7 +48,7 @@ export interface TechnicalIndicators {
 // Helper Functions
 // ============================================================
 
-function isFiniteNumber(n: number): boolean {
+function isFiniteNumber(n: number | undefined): boolean {
   return typeof n === 'number' && isFinite(n);
 }
 
@@ -73,7 +73,7 @@ export function computeSMA(data: number[], period: number): (number | null)[] {
     let count = 0;
     for (let j = i - period + 1; j <= i; j++) {
       if (isFiniteNumber(data[j])) {
-        sum += data[j];
+        sum += data[j]!;
         count++;
       }
     }
@@ -107,7 +107,7 @@ export function computeEMA(data: number[], period: number): (number | null)[] {
         let count = 0;
         for (let j = i - period + 1; j <= i; j++) {
           if (isFiniteNumber(data[j])) {
-            sum += data[j];
+            sum += data[j]!;
             count++;
           }
         }
@@ -117,7 +117,7 @@ export function computeEMA(data: number[], period: number): (number | null)[] {
       }
       result.push(ema);
     } else {
-      ema = (data[i] - ema) * multiplier + ema;
+      ema = (data[i]! - ema) * multiplier + ema;
       result.push(ema);
     }
   }
@@ -135,14 +135,14 @@ export function computeRSI(closes: number[], period: number = 14): (number | nul
   const losses: number[] = [];
 
   for (let i = 0; i < closes.length; i++) {
-    if (i === 0 || !isFiniteNumber(closes[i]) || !isFiniteNumber(closes[i - 1])) {
+    if (i === 0 || !isFiniteNumber(closes[i]!) || !isFiniteNumber(closes[i - 1]!)) {
       gains.push(0);
       losses.push(0);
       result.push(null);
       continue;
     }
 
-    const change = closes[i] - closes[i - 1];
+    const change = closes[i]!! - closes[i - 1]!!;
     gains.push(change > 0 ? change : 0);
     losses.push(change < 0 ? Math.abs(change) : 0);
 
@@ -155,8 +155,8 @@ export function computeRSI(closes: number[], period: number = 14): (number | nul
       let avgGain = 0;
       let avgLoss = 0;
       for (let j = 1; j <= period; j++) {
-        avgGain += gains[j];
-        avgLoss += losses[j];
+        avgGain += gains[j]!;
+        avgLoss += losses[j]!;
       }
       avgGain /= period;
       avgLoss /= period;
@@ -171,8 +171,8 @@ export function computeRSI(closes: number[], period: number = 14): (number | nul
       let sumGain = 0;
       let sumLoss = 0;
       for (let j = i - period + 1; j <= i; j++) {
-        sumGain += gains[j];
-        sumLoss += losses[j];
+        sumGain += gains[j]!;
+        sumLoss += losses[j]!;
       }
 
       const avgGain = sumGain / period;
@@ -253,8 +253,8 @@ export function computeBollingerBands(
     let sumSquaredDiff = 0;
     let count = 0;
     for (let j = i - period + 1; j <= i; j++) {
-      if (j >= 0 && isFiniteNumber(closes[j])) {
-        const diff = closes[j] - middle[i]!;
+      if (j >= 0 && isFiniteNumber(closes[j]!)) {
+        const diff = closes[j]! - middle[i]!;
         sumSquaredDiff += diff * diff;
         count++;
       }
@@ -286,14 +286,14 @@ export function computeATR(
   const trueRanges: number[] = [];
 
   for (let i = 0; i < highs.length; i++) {
-    if (i === 0 || !isFiniteNumber(highs[i]) || !isFiniteNumber(lows[i])) {
-      trueRanges.push(highs[i] - lows[i] || 0);
+    if (i === 0 || !isFiniteNumber(highs[i]!) || !isFiniteNumber(lows[i]!)) {
+      trueRanges.push(highs[i]! - lows[i]! || 0);
       continue;
     }
 
-    const hl = highs[i] - lows[i];
-    const hc = Math.abs(highs[i] - closes[i - 1]);
-    const lc = Math.abs(lows[i] - closes[i - 1]);
+    const hl = highs[i]! - lows[i]!;
+    const hc = Math.abs(highs[i]! - closes[i - 1]!);
+    const lc = Math.abs(lows[i]! - closes[i - 1]!);
     trueRanges.push(Math.max(hl, hc, lc));
   }
 
@@ -309,11 +309,11 @@ export function computeATR(
     if (atr === null) {
       let sum = 0;
       for (let j = i - period + 1; j <= i; j++) {
-        sum += trueRanges[j];
+        sum += trueRanges[j]!;
       }
       atr = sum / period;
     } else {
-      atr = (atr * (period - 1) + trueRanges[i]) / period;
+      atr = (atr * (period - 1) + trueRanges[i]!) / period;
     }
 
     result.push(atr);
@@ -340,19 +340,19 @@ export function computeADX(
     if (i === 0) {
       plusDM.push(0);
       minusDM.push(0);
-      tr.push(highs[0] - lows[0]);
+      tr.push(highs[0]! - lows[0]!);
       continue;
     }
 
-    const upMove = highs[i] - highs[i - 1];
-    const downMove = lows[i - 1] - lows[i];
+    const upMove = highs[i]! - highs[i - 1]!;
+    const downMove = lows[i - 1]! - lows[i]!;
 
     plusDM.push(upMove > downMove && upMove > 0 ? upMove : 0);
     minusDM.push(downMove > upMove && downMove > 0 ? downMove : 0);
 
-    const hl = highs[i] - lows[i];
-    const hc = Math.abs(highs[i] - closes[i - 1]);
-    const lc = Math.abs(lows[i] - closes[i - 1]);
+    const hl = highs[i]! - lows[i]!;
+    const hc = Math.abs(highs[i]! - closes[i - 1]!);
+    const lc = Math.abs(lows[i]! - closes[i - 1]!);
     tr.push(Math.max(hl, hc, lc));
   }
 
@@ -365,9 +365,9 @@ export function computeADX(
       if (i === period - 1) {
         let sumPDM = 0, sumMDM = 0, sumTR = 0;
         for (let j = 0; j <= i; j++) {
-          sumPDM += plusDM[j];
-          sumMDM += minusDM[j];
-          sumTR += tr[j];
+          sumPDM += plusDM[j]!;
+          sumMDM += minusDM[j]!;
+          sumTR += tr[j]!;
         }
         smoothedPlusDM.push(sumPDM);
         smoothedMinusDM.push(sumMDM);
@@ -379,9 +379,9 @@ export function computeADX(
       }
     } else {
       const prevIdx = smoothedPlusDM.length - 1;
-      smoothedPlusDM.push(smoothedPlusDM[prevIdx] - smoothedPlusDM[prevIdx] / period + plusDM[i]);
-      smoothedMinusDM.push(smoothedMinusDM[prevIdx] - smoothedMinusDM[prevIdx] / period + minusDM[i]);
-      smoothedTR.push(smoothedTR[prevIdx] - smoothedTR[prevIdx] / period + tr[i]);
+      smoothedPlusDM.push(smoothedPlusDM[prevIdx]! - smoothedPlusDM[prevIdx]! / period + plusDM[i]!);
+      smoothedMinusDM.push(smoothedMinusDM[prevIdx]! - smoothedMinusDM[prevIdx]! / period + minusDM[i]!);
+      smoothedTR.push(smoothedTR[prevIdx]! - smoothedTR[prevIdx]! / period + tr[i]!);
     }
   }
 
@@ -390,13 +390,13 @@ export function computeADX(
   const dx: number[] = [];
 
   for (let i = 0; i < highs.length; i++) {
-    if (smoothedTR[i] === 0) {
+    if (smoothedTR[i]! === 0) {
       plusDI.push(0);
       minusDI.push(0);
       dx.push(0);
     } else {
-      const pdi = (smoothedPlusDM[i] / smoothedTR[i]) * 100;
-      const mdi = (smoothedMinusDM[i] / smoothedTR[i]) * 100;
+      const pdi = (smoothedPlusDM[i]! / smoothedTR[i]!) * 100;
+      const mdi = (smoothedMinusDM[i]! / smoothedTR[i]!) * 100;
       plusDI.push(pdi);
       minusDI.push(mdi);
       dx.push(pdi + mdi === 0 ? 0 : (Math.abs(pdi - mdi) / (pdi + mdi)) * 100);
@@ -415,11 +415,11 @@ export function computeADX(
     if (adx === null) {
       let sum = 0;
       for (let j = i - period + 1; j <= i; j++) {
-        sum += dx[j];
+        sum += dx[j]!;
       }
       adx = sum / period;
     } else {
-      adx = (adx * (period - 1) + dx[i]) / period;
+      adx = (adx * (period - 1) + dx[i]!) / period;
     }
 
     result.push(atr !== null ? adx : null);
@@ -451,14 +451,14 @@ export function computeStochastic(
     let lowestLow = Infinity;
 
     for (let j = i - kPeriod + 1; j <= i; j++) {
-      if (isFiniteNumber(highs[j])) highestHigh = Math.max(highestHigh, highs[j]);
-      if (isFiniteNumber(lows[j])) lowestLow = Math.min(lowestLow, lows[j]);
+      if (isFiniteNumber(highs[j]!)) highestHigh = Math.max(highestHigh, highs[j]!);
+      if (isFiniteNumber(lows[j]!)) lowestLow = Math.min(lowestLow, lows[j]!);
     }
 
     if (highestHigh === lowestLow) {
       rawK.push(50);
     } else {
-      rawK.push(((closes[i] - lowestLow) / (highestHigh - lowestLow)) * 100);
+      rawK.push(((closes[i]! - lowestLow) / (highestHigh - lowestLow)) * 100);
     }
   }
 
@@ -493,14 +493,14 @@ export function computeWilliamsR(
     let lowestLow = Infinity;
 
     for (let j = i - period + 1; j <= i; j++) {
-      if (isFiniteNumber(highs[j])) highestHigh = Math.max(highestHigh, highs[j]);
-      if (isFiniteNumber(lows[j])) lowestLow = Math.min(lowestLow, lows[j]);
+      if (isFiniteNumber(highs[j]!)) highestHigh = Math.max(highestHigh, highs[j]!);
+      if (isFiniteNumber(lows[j]!)) lowestLow = Math.min(lowestLow, lows[j]!);
     }
 
     if (highestHigh === lowestLow) {
       result.push(-50);
     } else {
-      result.push(((highestHigh - closes[i]) / (highestHigh - lowestLow)) * -100);
+      result.push(((highestHigh - closes[i]!) / (highestHigh - lowestLow)) * -100);
     }
   }
 
@@ -520,7 +520,7 @@ export function computeCCI(
   const typicalPrices: number[] = [];
 
   for (let i = 0; i < closes.length; i++) {
-    typicalPrices.push((highs[i] + lows[i] + closes[i]) / 3);
+    typicalPrices.push((highs[i]! + lows[i]! + closes[i]!) / 3);
   }
 
   const smaTP = computeSMA(typicalPrices, period);
@@ -535,8 +535,8 @@ export function computeCCI(
     let sumDev = 0;
     let count = 0;
     for (let j = i - period + 1; j <= i; j++) {
-      if (j >= 0 && isFiniteNumber(typicalPrices[j])) {
-        sumDev += Math.abs(typicalPrices[j] - smaTP[i]!);
+      if (j >= 0 && isFiniteNumber(typicalPrices[j]!)) {
+        sumDev += Math.abs(typicalPrices[j]! - smaTP[i]!);
         count++;
       }
     }
@@ -557,12 +557,12 @@ export function computeOBV(closes: number[], volumes: number[]): number[] {
 
   for (let i = 0; i < closes.length; i++) {
     if (i === 0) {
-      result.push(volumes[i] || 0);
+      result.push(volumes[i]! || 0);
     } else {
-      if (closes[i] > closes[i - 1]) {
-        result.push(result[i - 1] + (volumes[i] || 0));
-      } else if (closes[i] < closes[i - 1]) {
-        result.push(result[i - 1] - (volumes[i] || 0));
+      if (closes[i]! > closes[i - 1]!) {
+        result.push(result[i - 1] + (volumes[i]! || 0));
+      } else if (closes[i]! < closes[i - 1]!) {
+        result.push(result[i - 1] - (volumes[i]! || 0));
       } else {
         result.push(result[i - 1]);
       }
@@ -616,8 +616,8 @@ export function computeAllIndicators(bars: PriceBar[]): TechnicalIndicators[] {
       sma200: safeNum(sma200[i] ?? 0),
       ema12: safeNum(ema12[i] ?? 0),
       ema26: safeNum(ema26[i] ?? 0),
-      atr14: safeNum(atr[i] ?? 0),
-      adx14: safeNum(adx[i] ?? 0),
+      atr14: safeNum(atr[i]! ?? 0),
+      adx14: safeNum(adx[i]! ?? 0),
       stochasticK: safeNum(stoch.k[i] ?? 0),
       stochasticD: safeNum(stoch.d[i] ?? 0),
       williamsR: safeNum(williamsR[i] ?? 0),

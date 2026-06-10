@@ -1,0 +1,13 @@
+{
+  "name": "egx-pro-alert-worker",
+  "version": "1.0.0",
+  "description": "P2.4: Alert checking worker for EGX Pro Valuation Platform",
+  "scripts": {
+    "dev": "bun --hot check-alerts.ts",
+    "start": "bun check-alerts.ts",
+    "check": "bun check-alerts.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.107.0"
+  }
+}

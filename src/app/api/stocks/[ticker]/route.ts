@@ -58,6 +58,9 @@ function buildDefaultStock(masterStock: typeof EGX_STOCKS[number]): SupabaseStoc
     fiftyTwoWeekHigh: finData?.fiftyTwoWeekHigh || 0,
     fiftyTwoWeekLow: finData?.fiftyTwoWeekLow || 0,
     avgVolume: finData?.avgVolume || 0,
+    isin: '',
+    yahooSymbol: '',
+    minorityInterests: 0,
     exchange: 'EGX',
     currency: 'EGP',
     listedDate: null,
@@ -66,6 +69,7 @@ function buildDefaultStock(masterStock: typeof EGX_STOCKS[number]): SupabaseStoc
     logo: null,
     lastPriceAt: null,
     lastFinancialsAt: null,
+    lastSyncedAt: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

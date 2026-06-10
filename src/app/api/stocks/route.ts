@@ -35,6 +35,9 @@ function masterToStock(s: typeof EGX_STOCKS[number]): SupabaseStock {
     fiftyTwoWeekLow: finData?.fiftyTwoWeekLow || 0,
     avgVolume: finData?.avgVolume || 0,
     egx30Beta: 0,
+    isin: '',
+    yahooSymbol: '',
+    minorityInterests: 0,
     exchange: 'EGX',
     currency: 'EGP',
     listedDate: null,
@@ -43,6 +46,7 @@ function masterToStock(s: typeof EGX_STOCKS[number]): SupabaseStock {
     logo: null,
     lastPriceAt: null,
     lastFinancialsAt: null,
+    lastSyncedAt: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };

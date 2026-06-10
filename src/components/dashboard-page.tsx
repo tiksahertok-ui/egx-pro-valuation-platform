@@ -402,8 +402,10 @@ export function DashboardPage({ stocks, sectors, isLoading, onSelectStock, onNav
                   formatter={(value: number, name: string) => [`EGP ${value.toFixed(2)}`, name]}
                   labelFormatter={(_, payload) => {
                     if (payload && payload.length > 0) {
-                      const data = payload[0].payload as { ticker: string; upside: number };
-                      return `${data.ticker} (${data.upside > 0 ? '+' : ''}${data.upside.toFixed(1)}%)`;
+                      const data = payload[0]?.payload as { ticker: string; upside: number } | undefined;
+                      if (data) {
+                        return `${data.ticker} (${data.upside > 0 ? '+' : ''}${data.upside.toFixed(1)}%)`;
+                      }
                     }
                     return '';
                   }}

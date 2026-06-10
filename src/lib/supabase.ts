@@ -85,6 +85,9 @@ export interface SupabaseStock {
   fiftyTwoWeekHigh: number;
   fiftyTwoWeekLow: number;
   avgVolume: number;
+  isin: string;
+  yahooSymbol: string;
+  minorityInterests: number;
   exchange: string;
   currency: string;
   listedDate: string | null;
@@ -93,6 +96,7 @@ export interface SupabaseStock {
   logo: string | null;
   lastPriceAt: string | null;
   lastFinancialsAt: string | null;
+  lastSyncedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -119,6 +123,11 @@ export interface SupabaseFinancialData {
   bookValuePerShare: number;
   revenueGrowth: number;
   earningsGrowth: number;
+  usdRevenuePct: number;
+  cashEquivalents: number;
+  ebitda: number;
+  dividendPerShare: number;
+  lastSyncedAt: string | null;
   createdAt: string;
 }
 

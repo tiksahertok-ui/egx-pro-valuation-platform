@@ -111,8 +111,8 @@ export function StocksPage({ stocks, isLoading, onSelectStock }: StocksPageProps
         aVal = grahamMap.get(a.ticker)?.upside || 0;
         bVal = grahamMap.get(b.ticker)?.upside || 0;
       } else {
-        aVal = (a as Record<string, unknown>)[sortBy] as number || 0;
-        bVal = (b as Record<string, unknown>)[sortBy] as number || 0;
+        aVal = (a as unknown as Record<string, unknown>)[sortBy] as number || 0;
+        bVal = (b as unknown as Record<string, unknown>)[sortBy] as number || 0;
       }
       return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
     });
